@@ -1,0 +1,287 @@
+// Prisma schema for NextAuth + encrypted provider tokens + export jobs
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String    @id @default(uuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+
+  accounts Account[]
+  sessions Session[]
+
+  providerTokens UserProviderToken[]
+  memberships    GroupMember[]
+  posts          Post[]
+  chatMessages   ChatMessage[]
+  playlistItems  GroupPlaylistItem[]
+  snapshots      Snapshot[]          @relation("creatorSnapshots")
+  reactions      Reaction[]
+  InviteLink     InviteLink[]
+
+  @@map("users")
+}
+
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String? @db.Text
+  access_token       String? @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String? @db.Text
+  session_state      String?
+  oauth_token_secret String?
+  oauth_token        String?
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model UserProviderToken {
+  id                    String    @id @default(uuid())
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId                String
+  provider              String // 'spotify' | 'google' | etc
+  refreshTokenEncrypted String?   @db.Text
+  accessTokenEncrypted  String?   @db.Text
+  tokenExpiresAt        DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([userId, provider], name: "userId_provider")
+  @@map("user_provider_tokens")
+}
+
+model ExportJob {
+  id            String   @id @default(uuid())
+  snapshotId    String
+  snapshot      Snapshot @relation("snapshotExportJobs", fields: [snapshotId], references: [id], onDelete: Cascade)
+  userId        String
+  provider      String
+  status        String   @default("queued") // queued | in_progress | completed | failed
+  attemptCount  Int      @default(0)
+  maxAttempts   Int      @default(5)
+  nextAttemptAt DateTime @default(now())
+  lastError     String?  @db.Text
+  result        Json?    @db.Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status, nextAttemptAt], name: "idx_export_status_next_at")
+  @@map("export_jobs")
+}
+
+model Group {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  members      GroupMember[]
+  posts        Post[]
+  playlist     GroupPlaylistItem[]
+  snapshots    Snapshot[]
+  chatMessages ChatMessage[]
+  inviteLinks  InviteLink[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  id       String   @id @default(uuid())
+  group    Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId  String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId   String
+  role     String   @default("member")
+  joinedAt DateTime @default(now())
+
+  @@unique([groupId, userId], name: "unique_group_member")
+  @@map("group_members")
+}
+
+model InviteLink {
+  id          String    @id @default(uuid())
+  group       Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId     String
+  code        String    @unique
+  createdBy   User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdById String
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  oneTimeUse  Boolean   @default(false)
+  valid       Boolean   @default(true)
+
+  @@map("invite_links")
+}
+
+model Post {
+  id                    String    @id @default(uuid())
+  group                 Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId               String
+  author                User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId              String
+  spotifyUri            String?
+  youtubeId             String?
+  title                 String?
+  caption               String?   @db.Text
+  highlightStartSeconds Int?
+  highlightEndSeconds   Int?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  deletedAt             DateTime?
+
+  comments     ChatMessage[]      @relation("postComments")
+  playlistItem GroupPlaylistItem? @relation("postPlaylistItem")
+
+  @@index([groupId, createdAt], name: "idx_post_group_created")
+  @@map("posts")
+}
+
+model ChatMessage {
+  id         String    @id @default(uuid())
+  group      Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId    String
+  author     User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId   String
+  text       String?   @db.Text
+  post       Post?     @relation("postComments", fields: [postId], references: [id], onDelete: Cascade)
+  postId     String?
+  spotifyUri String?
+  youtubeId  String?
+  createdAt  DateTime  @default(now())
+  editedAt   DateTime?
+
+  @@index([groupId, createdAt], name: "idx_chat_group_created")
+  @@map("chat_messages")
+}
+
+model Reaction {
+  id         String   @id @default(uuid())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  targetType String
+  targetId   String
+  reaction   String
+  metadata   Json?    @db.Json
+  createdAt  DateTime @default(now())
+
+  @@index([targetType, targetId], name: "idx_reaction_target")
+  @@map("reactions")
+}
+
+model GroupPlaylistItem {
+  id         String   @id @default(uuid())
+  group      Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId    String
+  addedBy    User     @relation(fields: [addedById], references: [id], onDelete: Cascade)
+  addedById  String
+  spotifyUri String?
+  youtubeId  String?
+  title      String?
+  note       String?  @db.Text
+  position   Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  postId String? @unique
+  post   Post?   @relation("postPlaylistItem", fields: [postId], references: [id])
+
+  @@index([groupId, position], name: "idx_playlist_group_position")
+  @@map("group_playlist_items")
+}
+
+model Snapshot {
+  id          String   @id @default(uuid())
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId     String
+  name        String
+  description String?
+  createdBy   User     @relation("creatorSnapshots", fields: [createdById], references: [id], onDelete: Cascade)
+  createdById String
+  createdAt   DateTime @default(now())
+
+  items      SnapshotItem[]
+  exportJobs ExportJob[]    @relation("snapshotExportJobs")
+
+  @@map("snapshots")
+}
+
+model SnapshotItem {
+  id         String   @id @default(uuid())
+  snapshot   Snapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  snapshotId String
+  postId     String?
+  spotifyUri String?
+  youtubeId  String?
+  position   Int
+  createdAt  DateTime @default(now())
+
+  @@index([snapshotId, position], name: "idx_snapshot_items_order")
+  @@map("snapshot_items")
+}
+
+model TrackMetadata {
+  id            String    @id @default(uuid())
+  spotifyUri    String?   @unique
+  youtubeId     String?   @unique
+  title         String?
+  artist        String?
+  durationSec   Int?
+  thumbnailUrl  String?
+  rawProviders  Json?     @db.Json
+  lastFetchedAt DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@map("track_metadata")
+}
+
+model PlayEvent {
+  id              String    @id @default(uuid())
+  groupId         String
+  postId          String?
+  playlistItemId  String?
+  playedById      String
+  startedAt       DateTime
+  endedAt         DateTime?
+  durationSeconds Int?
+  createdAt       DateTime  @default(now())
+
+  @@index([groupId, createdAt], name: "idx_playevents_group_created")
+  @@map("play_events")
+}
