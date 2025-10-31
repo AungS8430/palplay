@@ -1,0 +1,80 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { prisma } from "@/lib/prisma";
+
+export async function POST(request: NextRequest, { params }: { params: Promise<{ groupId: string }> }) {
+  const { groupId } = await params;
+
+  const searchParams = request.nextUrl.searchParams;
+
+  const inviteCode = searchParams.get("inviteCode");
+  if (!inviteCode) {
+    return NextResponse.json({ error: "Invite code is required" }, { status: 400 });
+  }
+
+  const session = await getServerSession();
+
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const user = (session as any).userId as string;
+
+  try {
+    const existingMembership = await prisma.groupMember.findFirst({
+      where: {
+        groupId: groupId,
+        userId: user,
+      },
+    });
+
+    if (existingMembership) {
+      return NextResponse.json(
+        { error: "Already a member of the group" },
+        { status: 400 }
+      );
+    }
+
+    const invite = await prisma.inviteLink.findFirst({
+      where: {
+        groupId: groupId,
+        code: inviteCode,
+      },
+    });
+
+    if (!invite) {
+      return NextResponse.json({ error: "Invalid invite code" }, { status: 400 });
+    }
+
+    if (invite.expiresAt && invite.expiresAt < new Date()) {
+      return NextResponse.json({ error: "Invite code has expired" }, { status: 400 });
+    }
+
+    if (!invite.valid) {
+      return NextResponse.json({ error: "Invite code is no longer valid" }, { status: 400 });
+    }
+
+    await prisma.groupMember.create({
+      data: {
+        groupId: groupId,
+        userId: user,
+        role: "member",
+      },
+    });
+
+    if (invite.oneTimeUse) {
+      await prisma.inviteLink.update({
+        where: {
+          id: invite.id
+        },
+        data: {
+          valid: false
+        },
+      });
+    }
+
+    return NextResponse.json({ message: "Joined group successfully" });
+  } catch (e) {
+    return NextResponse.json({ error: "Failed to join group" }, { status: 500 });
+  }
+}
