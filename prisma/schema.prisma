@@ -164,7 +164,7 @@ model Post {
   highlightEndSeconds   Int?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
-  deletedAt             DateTime?
+  deleted               Boolean   @default(false)
 
   comments     ChatMessage[]      @relation("postComments")
   playlistItem GroupPlaylistItem? @relation("postPlaylistItem")
@@ -182,6 +182,8 @@ model ChatMessage {
   text       String?   @db.Text
   post       Post?     @relation("postComments", fields: [postId], references: [id], onDelete: Cascade)
   postId     String?
+  replyTo    ChatMessage? @relation("messageReplies", fields: [replyToId], references: [id], onDelete: Cascade)
+  replyToId  String?
   spotifyUri String?
   youtubeId  String?
   createdAt  DateTime  @default(now())
@@ -189,6 +191,7 @@ model ChatMessage {
 
   @@index([groupId, createdAt], name: "idx_chat_group_created")
   @@map("chat_messages")
+  ChatMessage ChatMessage[] @relation("messageReplies")
 }
 
 model Reaction {

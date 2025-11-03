@@ -1,0 +1,192 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { prisma } from "@/lib/prisma";
+
+export async function GET(request: Request, { params }: { params: Promise<{ groupId: string }> }) {
+  const { groupId } = await params;
+
+  const session = await getServerSession();
+
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const userId = (session as any).userId as string;
+
+  try {
+    const membership = await prisma.groupMember.findFirst({
+      where: {
+        groupId: groupId,
+        userId: userId,
+      },
+    });
+
+    if (!membership) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const messages = await prisma.chatMessage.findMany({
+      where: {
+        groupId: groupId,
+        postId: null,
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    return NextResponse.json({ messages });
+  } catch (e) {
+    return NextResponse.json({ error: "Failed to fetch messages" }, { status: 500 });
+  }
+}
+
+export default async function POST(request: NextRequest, { params }: { params: Promise<{ groupId: string }> }) {
+  const { groupId } = await params;
+
+  const searchParams = request.nextUrl.searchParams;
+
+  const text = searchParams.get("text");
+  const postId = searchParams.get("postId");
+  const replyToId = searchParams.get("replyToId");
+  const spotifyUri = searchParams.get("spotifyUri");
+  const youtubeId = searchParams.get("youtubeId");
+
+  const session = await getServerSession();
+
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const userId = (session as any).userId as string;
+
+  try {
+    const membership = await prisma.groupMember.findFirst({
+      where: {
+        groupId: groupId,
+        userId: userId,
+      },
+    });
+
+    if (!membership) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const newMessage = await prisma.chatMessage.create({
+      data: {
+        groupId: groupId,
+        authorId: userId,
+        text: text || undefined,
+        postId: postId || undefined,
+        replyToId: replyToId || undefined,
+        spotifyUri: spotifyUri || undefined,
+        youtubeId: youtubeId || undefined,
+      },
+    });
+
+    return NextResponse.json({ message: newMessage }, { status: 201 });
+  } catch (e) {
+    return NextResponse.json({ error: "Failed to create message" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ groupId: string }> }) {
+  const { groupId } = await params;
+
+  const searchParams = request.nextUrl.searchParams;
+  const messageId = searchParams.get("messageId");
+
+  const session = await getServerSession();
+
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const userId = (session as any).userId as string;
+
+  try {
+    const membership = await prisma.groupMember.findFirst({
+      where: {
+        groupId: groupId,
+        userId: userId,
+      },
+    });
+
+    if (!membership) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const message = await prisma.chatMessage.findUnique({
+      where: {
+        id: messageId || "",
+      },
+    });
+
+    if (!message || message.authorId !== userId) {
+      return NextResponse.json({ error: "Message not found or access denied" }, { status: 404 });
+    }
+
+    await prisma.chatMessage.delete({
+      where: {
+        id: messageId || "",
+      },
+    });
+
+    return NextResponse.json({ message: "Message deleted successfully" });
+  } catch (e) {
+    return NextResponse.json({ error: "Failed to delete message" }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ groupId: string }> }) {
+  const { groupId } = await params;
+
+  const searchParams = request.nextUrl.searchParams;
+  const messageId = searchParams.get("messageId");
+  const newText = searchParams.get("text");
+
+  const session = await getServerSession();
+
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const userId = (session as any).userId as string;
+
+  try {
+    const membership = await prisma.groupMember.findFirst({
+      where: {
+        groupId: groupId,
+        userId: userId,
+      },
+    });
+
+    if (!membership) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const message = await prisma.chatMessage.findUnique({
+      where: {
+        id: messageId || "",
+      },
+    });
+
+    if (!message || message.authorId !== userId) {
+      return NextResponse.json({ error: "Message not found or access denied" }, { status: 404 });
+    }
+
+    const updatedMessage = await prisma.chatMessage.update({
+      where: {
+        id: messageId || "",
+      },
+      data: {
+        text: newText || message.text,
+      },
+    });
+
+    return NextResponse.json({ message: updatedMessage });
+  } catch (e) {
+    return NextResponse.json({ error: "Failed to update message" }, { status: 500 });
+  }
+}
+
