@@ -188,10 +188,10 @@ model ChatMessage {
   youtubeId  String?
   createdAt  DateTime  @default(now())
   editedAt   DateTime?
+  replies    ChatMessage[] @relation("messageReplies")
 
   @@index([groupId, createdAt], name: "idx_chat_group_created")
   @@map("chat_messages")
-  ChatMessage ChatMessage[] @relation("messageReplies")
 }
 
 model Reaction {

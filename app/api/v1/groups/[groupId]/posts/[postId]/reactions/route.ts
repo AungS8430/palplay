@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
 
-export async function GET(request: Request, { params }: { params: Promise<{ groupId: string, postId: string }> }) {
-  const {groupId, postId} = await params;
+export async function GET(request: NextRequest, { params }: { params: Promise<{ groupId: string, postId: string }> }) {
+  const { groupId, postId } = await params;
 
   const session = await getServerSession();
 
   if (!session) {
-    return NextResponse.json({error: "Unauthorized"}, {status: 401});
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const userId = (session as any).userId as string;
@@ -22,15 +22,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ grou
     });
 
     if (!membership) {
-      return NextResponse.json({error: "Forbidden"}, {status: 403});
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-
-    const post = await prisma.post.findUnique({
-      where: {
-        id: postId,
-        groupId: groupId,
-      },
-    });
 
     const reactions = await prisma.reaction.findMany({
       where: {
@@ -39,18 +32,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ grou
       }
     })
 
-    if (!post) {
-      return NextResponse.json({error: "Post not found"}, {status: 404});
-    }
-
-    return NextResponse.json({ post, reactions });
+    return NextResponse.json({ reactions });
   } catch (e) {
-    return NextResponse.json({error: "Failed to fetch post"}, {status: 500});
+    return NextResponse.json({ error: "Failed to fetch reactions" }, { status: 500 });
   }
 }
 
-export async function DELETE(request: Request, { params }: { params: Promise<{ groupId: string, postId: string }> }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ groupId: string, postId: string }> }) {
   const { groupId, postId } = await params;
+
+  const searchParams = request.nextUrl.searchParams;
+
+  const emoji = searchParams.get("emoji");
 
   const session = await getServerSession();
 
@@ -72,7 +65,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ g
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const post = await prisma.post.findUnique({
+    const post = await prisma.post.findFirst({
       where: {
         id: postId,
         groupId: groupId,
@@ -83,31 +76,27 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ g
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
 
-    if (post.authorId !== userId && membership.role !== "owner" && membership.role !== "admin") {
-      return NextResponse.json({ error: "You do not have permission to delete this post" }, { status: 403 });
-    }
-
-    await prisma.post.update({
-      where: {
-        id: postId,
-      },
+    const reaction = await prisma.reaction.create({
       data: {
-        deleted: true,
+        targetType: "post",
+        targetId: postId,
+        reaction: emoji || "",
+        userId: userId,
       },
     });
 
-    return NextResponse.json({ message: "Post deleted successfully" });
+    return NextResponse.json({ reaction }, { status: 201 });
   } catch (e) {
-    return NextResponse.json({ error: "Failed to delete post" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to add reaction" }, { status: 500 });
   }
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: Promise<{ groupId: string, postId: string }> }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ groupId: string, postId: string }> }) {
   const { groupId, postId } = await params;
 
-  const searhParams = request.nextUrl.searchParams;
-  const title = searhParams.get("title");
-  const caption = searhParams.get("caption");
+  const searchParams = request.nextUrl.searchParams;
+
+  const emoji = searchParams.get("emoji");
 
   const session = await getServerSession();
 
@@ -129,7 +118,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const post = await prisma.post.findUnique({
+    const post = await prisma.post.findFirst({
       where: {
         id: postId,
         groupId: groupId,
@@ -140,23 +129,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
 
-    if (post.authorId !== userId) {
-      return NextResponse.json({ error: "You do not have permission to edit this post" }, { status: 403 });
-    }
-
-    const updatedPost = await prisma.post.update({
+    const deleted = await prisma.reaction.deleteMany({
       where: {
-        id: postId,
-      },
-      data: {
-        title: title || post.title,
-        caption: caption || post.caption,
+        targetType: "post",
+        targetId: postId,
+        reaction: emoji || "",
+        userId: userId,
       },
     });
 
-    return NextResponse.json({ post: updatedPost });
+    return NextResponse.json({ deletedCount: deleted.count });
   } catch (e) {
-    return NextResponse.json({ error: "Failed to update post" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to remove reaction" }, { status: 500 });
   }
 }
-
