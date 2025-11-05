@@ -11,16 +11,12 @@ import {
 } from "@/components/ui/card"
 import { Music, Users, FileChartPie } from "lucide-react"
 import Image from "next/image";
+import { redirect } from "next/navigation";
 
 export default async function Root() {
   const session = await getServerSession();
   if (session) {
-    return (
-      // TODO
-      <div>
-
-      </div>
-    )
+    redirect("/app")
   } else {
     return (
       <div>
