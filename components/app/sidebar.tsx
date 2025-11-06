@@ -7,7 +7,7 @@ import {
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
-  SidebarMenuItem,
+  SidebarMenuItem, SidebarSeparator,
 } from "@/components/ui/sidebar"
 import {
   DropdownMenu,
@@ -18,14 +18,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import SignOutButton from "@/components/app/signOut";
+import NewGroup from "@/components/app/newGroup";
 import Link from "next/link";
 import { getServerSession } from "next-auth";
 import Image from "next/image";
 import { CircleUser, Settings } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 export default async function AppSidebar() {
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
   return (
     <Sidebar>
       <SidebarHeader>
@@ -45,9 +47,13 @@ export default async function AppSidebar() {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
+            <NewGroup />
+          </SidebarMenuItem>
+          <SidebarSeparator />
+          <SidebarMenuItem>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <SidebarMenuButton size="lg">
+                <SidebarMenuButton size="lg" className="bg-secondary text-secondary-foreground hover:bg-secondary/90 hover:text-secondary-foreground active:bg-secondary/90 active:text-secondary-foreground min-w-8 duration-200 ease-linear">
                   <Avatar>
                     <AvatarImage src={session?.user?.image ?? undefined} alt={session?.user?.name ?? "User"} />
                     <AvatarFallback>{session?.user?.name?.split(/[^A-Za-z]/)[0][0]}{(session?.user?.name?.split(/[^A-Za-z]/)?.length || 0 > 1) && session?.user?.name?.split(/[^A-Za-z]/)[1][0]}</AvatarFallback>

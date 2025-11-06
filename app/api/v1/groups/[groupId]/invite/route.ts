@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import { customAlphabet } from "nanoid";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 const alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const makeInviteCode = customAlphabet(alphabet, 12);
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const expiresAt = expirySeconds ? new Date(Date.now() + expirySeconds * 1000) : null;
 
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
 
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 export async function GET(request: NextRequest, { params }: { params: Promise<{ groupId: string }> }) {
   const { groupId } = await params;
 
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
 
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

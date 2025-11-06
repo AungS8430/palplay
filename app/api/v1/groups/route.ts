@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
-export default async function POST(req: Request) {
-  const session = await getServerSession();
+export async function POST(req: Request) {
+  const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -28,6 +29,8 @@ export default async function POST(req: Request) {
         role: "owner",
       },
     });
+
+    return NextResponse.json({ message: "Group created successfully", groupId: group.id });
   } catch (e) {
     return NextResponse.json({ error: "Failed to create group" }, { status: 500 });
   }

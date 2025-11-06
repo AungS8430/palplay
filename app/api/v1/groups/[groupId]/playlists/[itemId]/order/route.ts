@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import getRank from "@/lib/lexorank";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ groupId: string, itemId: string }> }) {
   const { groupId, itemId } = await params;
@@ -11,7 +13,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const beforeId = searchParams.get("beforeId");
   const afterId = searchParams.get("afterId");
 
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
 
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

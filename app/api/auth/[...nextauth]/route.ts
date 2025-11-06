@@ -1,7 +1,7 @@
 import NextAuth, { type NextAuthOptions } from "next-auth";
 import SpotifyProvider from "next-auth/providers/spotify";
 import GoogleProvider from "next-auth/providers/google";
-import { PrismaAdapter } from "@auth/prisma-adapter";
+import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
 
@@ -32,19 +32,23 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   session: {
-    strategy: "jwt",
+    strategy: "database",
   },
   callbacks: {
-    async jwt({ token, user, account }) {
+    async session({ session, user }) {
+      console.log("Session callback triggered");
+      console.log("User from database:", user);
+
       if (user) {
-        (token as any).userId = (user as any).id;
+        session.userId = user.id;
+        if (session.user) {
+          (session.user as any).id = user.id;
+        }
       }
-      return token;
-    },
-    async session({ session, token }) {
-      (session as any).userId = (token as any).userId;
+
+      console.log("Session after callback:", session);
       return session;
-    },
+    }
   },
   events: {
     // runs after successful sign-in

@@ -8,7 +8,7 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 export default function SignOutButton() {
   return (
     <DropdownMenuItem
-      className={`hover:cursor-pointer`}
+      className="hover:cursor-pointer"
       onClick={() => signOut()}
     >
       <LogOut />
