@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import SignOutButton from "@/components/app/signOut";
 import NewGroup from "@/components/app/newGroup";
+import GroupList from "@/components/app/groupList";
 import Link from "next/link";
 import { getServerSession } from "next-auth";
 import Image from "next/image";
@@ -42,6 +43,9 @@ export default async function AppSidebar() {
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Your Groups</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <GroupList />
+          </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
@@ -56,7 +60,7 @@ export default async function AppSidebar() {
                 <SidebarMenuButton size="lg" className="bg-secondary text-secondary-foreground hover:bg-secondary/90 hover:text-secondary-foreground active:bg-secondary/90 active:text-secondary-foreground min-w-8 duration-200 ease-linear">
                   <Avatar>
                     <AvatarImage src={session?.user?.image ?? undefined} alt={session?.user?.name ?? "User"} />
-                    <AvatarFallback>{session?.user?.name?.split(/[^A-Za-z]/)[0][0]}{(session?.user?.name?.split(/[^A-Za-z]/)?.length || 0 > 1) && session?.user?.name?.split(/[^A-Za-z]/)[1][0]}</AvatarFallback>
+                    <AvatarFallback>{session?.user?.name?.split(/[^A-Za-z]/)[0][0]}{(session?.user?.name?.split(/[^A-Za-z]/)?.length && session?.user?.name?.split(/[^A-Za-z]/)?.length > 1) && session?.user?.name?.split(/[^A-Za-z]/)[1][0]}</AvatarFallback>
                   </Avatar>
                   <div className="flex flex-col">
                     <p className="truncate font-medium text-neutral-300">{session?.user?.name ?? "User"}</p>
@@ -69,7 +73,7 @@ export default async function AppSidebar() {
                   <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                     <Avatar>
                       <AvatarImage src={session?.user?.image ?? undefined} alt={session?.user?.name ?? "User"} />
-                      <AvatarFallback>{session?.user?.name?.split(/[^A-Za-z]/)[0][0]}{(session?.user?.name?.split(/[^A-Za-z]/)?.length || 0 > 1) && session?.user?.name?.split(/[^A-Za-z]/)[1][0]}</AvatarFallback>
+                      <AvatarFallback>{session?.user?.name?.split(/[^A-Za-z]/)[0][0]}{(session?.user?.name?.split(/[^A-Za-z]/)?.length && session?.user?.name?.split(/[^A-Za-z]/)?.length || 0 > 1) && session?.user?.name?.split(/[^A-Za-z]/)[1][0]}</AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col">
                       <p className="truncate font-medium text-neutral-300">{session?.user?.name ?? "User"}</p>
