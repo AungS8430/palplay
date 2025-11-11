@@ -65,7 +65,7 @@ export default function NewGroup() {
         }).then(async (inviteRes) => {
           if (inviteRes.ok) {
             const inviteData = await inviteRes.json();
-            const inviteLink = `${window.location.origin}/groups/join?groupId=${data.groupId}&inviteCode=${inviteData.invite.code}`;
+            const inviteLink = `${window.location.origin}/groups/join?inviteCode=${inviteData.invite.code}`;
             setInvite(inviteLink);
           } else {
             setInvite("Error creating invite link. Please try again.");
@@ -129,7 +129,7 @@ export default function NewGroup() {
               invite ? (
                 <div className="flex flex-row gap-1.5">
                   <Input disabled className="truncate" value={invite} />
-                  <Button onClick={handleCreateGroup} size="icon"><Copy /></Button>
+                  <Button onClick={() => navigator.clipboard.writeText(invite)} size="icon"><Copy /></Button>
                 </div>
               ) : (
                 <></>

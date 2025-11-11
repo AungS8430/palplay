@@ -17,11 +17,9 @@ export async function getAuthenticatedSupabaseClient() {
   // Check if we have a valid cached token (with 5 minute buffer)
   const now = Date.now();
   if (cachedClient && cachedToken && tokenExpiry && tokenExpiry > now + 300000) {
-    console.log("Using cached Supabase client");
     return cachedClient;
   }
 
-  console.log("Fetching new Supabase token");
   const response = await fetch("/api/auth/supabase-token");
 
   if (!response.ok) {
@@ -58,7 +56,6 @@ export async function getAuthenticatedSupabaseClient() {
   });
 
   // Set the auth token for realtime connections BEFORE subscribing
-  console.log("Setting realtime auth token");
   client.realtime.setAuth(token);
 
   cachedClient = client;
@@ -67,7 +64,6 @@ export async function getAuthenticatedSupabaseClient() {
 
 // Clear cached client (useful for logout)
 export function clearSupabaseClientCache() {
-  console.log("Clearing Supabase client cache");
   cachedClient = null;
   cachedToken = null;
   tokenExpiry = null;

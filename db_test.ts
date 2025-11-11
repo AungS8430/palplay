@@ -7,7 +7,6 @@ const SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 async function testUnauthorizedAccess() {
   const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  console.log("Testing unauthorized access...");
 
   // Try to read group_members
   const { data: members, error: membersError } = await client

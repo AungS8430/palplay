@@ -7,9 +7,9 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 export async function POST(request: NextRequest, { params }: { params: Promise<{ groupId: string }> }) {
   const { groupId } = await params;
 
-  const searchParams = request.nextUrl.searchParams;
+  const body = await request.json();
 
-  const inviteCode = searchParams.get("inviteCode");
+  const { inviteCode } = body;
   if (!inviteCode) {
     return NextResponse.json({ error: "Invite code is required" }, { status: 400 });
   }
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (existingMembership) {
       return NextResponse.json(
         { error: "Already a member of the group" },
-        { status: 400 }
+        { status: 409 }
       );
     }
 

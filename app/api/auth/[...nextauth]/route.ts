@@ -36,9 +36,6 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async session({ session, user }) {
-      console.log("Session callback triggered");
-      console.log("User from database:", user);
-
       if (user) {
         session.userId = user.id;
         if (session.user) {
@@ -46,7 +43,6 @@ export const authOptions: NextAuthOptions = {
         }
       }
 
-      console.log("Session after callback:", session);
       return session;
     }
   },

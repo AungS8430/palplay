@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import SignOutButton from "@/components/app/signOut";
 import NewGroup from "@/components/app/newGroup";
+import JoinGroup from "@/components/app/joinGroup";
 import GroupList from "@/components/app/groupList";
 import Link from "next/link";
 import { getServerSession } from "next-auth";
@@ -52,6 +53,9 @@ export default async function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <NewGroup />
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <JoinGroup />
           </SidebarMenuItem>
           <SidebarSeparator />
           <SidebarMenuItem>
