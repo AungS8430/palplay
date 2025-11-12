@@ -71,7 +71,7 @@ export default function JoinGroup() {
     if (error) return;
     if (!groupId) return;
 
-    const response = fetch(`api/v1/${groupId}/join`, {
+    const response = fetch(`api/v1/groups/${groupId}/join`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
