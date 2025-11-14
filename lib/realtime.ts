@@ -54,12 +54,16 @@ export function useRealtimeGroupList() {
               filter: `userId=eq.${userId}`
             },
             async (payload: any) => {
-              const { data: newData } = await supabaseClient
-                .from("group_members")
-                .select("*, groups(*)")
-                .eq("userId", userId);
+              console.log("=== Realtime Event Received ===");
+              console.log("Event type:", payload.eventType);
 
-              setGroups(newData || []);
+              if (payload.eventType === "INSERT" && payload.new) {
+                setGroups(prev => [...prev, payload.new as GroupMember]);
+              } else if (payload.eventType === "DELETE" && payload.old) {
+                setGroups(prev => prev.filter(g => g.id !== payload.old.id));
+              } else if (payload.eventType === "UPDATE" && payload.new) {
+                setGroups(prev => prev.map(g => g.id === payload.new.id ? payload.new : g));
+              }
             }
           )
           .subscribe((status: string, err: any) => {

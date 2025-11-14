@@ -43,7 +43,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ grou
   }
 }
 
-export default async function DELETE(request: Request, { params }: { params: Promise<{ groupId: string }> }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ groupId: string }> }) {
   const { groupId } = await params;
 
   const session = await getServerSession(authOptions);
@@ -66,6 +66,12 @@ export default async function DELETE(request: Request, { params }: { params: Pro
     if (!membership) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+
+    await prisma.groupMember.deleteMany({
+      where: {
+        groupId: groupId,
+      },
+    });
 
     await prisma.group.delete({
       where: {

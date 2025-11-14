@@ -78,6 +78,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ g
       return NextResponse.json({ error: 'Member not found' }, { status: 404 });
     }
 
+    if (membershipToDelete.role === 'owner') {
+      return NextResponse.json({ error: 'Cannot remove the owner of the group' }, { status: 400 });
+    }
+
     await prisma.groupMember.delete({
       where: {
         id: membershipToDelete.id,
