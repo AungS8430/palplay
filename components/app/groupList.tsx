@@ -6,6 +6,14 @@ import { useRealtimeGroupList } from "@/lib/realtime";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import Group from "@/components/app/group";
 import { Spinner } from "@/components/ui/spinner";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty"
 
 export default function GroupList() {
   return (
@@ -26,12 +34,16 @@ function GroupListContent() {
               <Group groupId={group.groupId} key={group.groupId} role={group.role} />
             ))
           ) : (
-            <p className="text-sm text-neutral-500">You are not a member of any groups yet.</p>
+            <Empty>
+              <EmptyHeader>
+                <EmptyTitle>No groups</EmptyTitle>
+                <EmptyDescription>You are not a member of any groups yet.</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           )
         ) : (
           <div className="w-full h-full flex justify-center items-center py-4">
             <Spinner className="w-8 h-8" />
-
           </div>
         )
       }
