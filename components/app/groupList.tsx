@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { usePathname } from 'next/navigation'
 import { SessionProvider } from "next-auth/react";
 import { useRealtimeGroupList } from "@/lib/realtime";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
@@ -25,13 +25,14 @@ export default function GroupList() {
 
 function GroupListContent() {
   const { groups, connected } = useRealtimeGroupList();
+  const pathname = usePathname();
   return (
     <>
       {
         connected ? (
           groups && groups.length > 0 ? (
             groups.map((group) => (
-              <Group groupId={group.groupId} key={group.groupId} role={group.role} />
+              <Group groupId={group.groupId} key={group.groupId} role={group.role} isActive={pathname.includes(group.groupId)} />
             ))
           ) : (
             <Empty>

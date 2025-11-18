@@ -37,8 +37,9 @@ import { Button } from "@/components/ui/button";
 import { Trash, LogOut, EllipsisVertical } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
-export default function Group({ groupId, role }: { groupId: string, role: string }) {
+export default function Group({ groupId, role, isActive }: { groupId: string, role: string, isActive?: boolean }) {
   const { groupInfo, connected } = useRealtimeGroupInfo(groupId);
   const [confirmation, setConfirmation] = useState("");
   const [confirmationError, setConfirmationError] = useState(false);
@@ -102,12 +103,14 @@ export default function Group({ groupId, role }: { groupId: string, role: string
     (
       connected ? (
         <div className="flex flex-row items-center gap-1">
-          <SidebarMenuButton size="lg">
-            <Avatar>
-              <AvatarImage src={undefined} alt={groupId} />
-              <AvatarFallback>{groupInfo?.name?.split(/[^A-Za-z]/)[0][0]}{(groupInfo?.name?.split(/[^A-Za-z]/)?.length && groupInfo?.name?.split(/[^A-Za-z]/)?.length > 1) && groupInfo?.name?.split(/[^A-Za-z]/)[1][0]}</AvatarFallback>
-            </Avatar>
-            <p className="truncate font-medium text-neutral-300">{groupInfo?.name ?? "User"}</p>
+          <SidebarMenuButton size="lg" asChild className={isActive ? "bg-neutral-800 hover:bg-neutral-800" : ""}>
+            <Link href={`/app/groups/${groupId}`}>
+              <Avatar>
+                <AvatarImage src={undefined} alt={groupId} />
+                <AvatarFallback>{groupInfo?.name?.split(/[^A-Za-z]/)[0][0]}{(groupInfo?.name?.split(/[^A-Za-z]/)?.length && groupInfo?.name?.split(/[^A-Za-z]/)?.length > 1) && groupInfo?.name?.split(/[^A-Za-z]/)[1][0]}</AvatarFallback>
+              </Avatar>
+              <p className="truncate font-medium text-neutral-300">{groupInfo?.name ?? "User"}</p>
+            </Link>
           </SidebarMenuButton>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DropdownMenu>
