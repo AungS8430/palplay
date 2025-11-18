@@ -5,6 +5,39 @@ import { useSession } from "next-auth/react";
 import { getAuthenticatedSupabaseClient } from "@/lib/supabase";
 import { GroupMember, Group } from "@/lib/types";
 
+async function buildChannelName(base: string, identifier: string) {
+  const supabaseClient = await getAuthenticatedSupabaseClient();
+
+  // Check auth status
+  const { data: { session: supabaseSession }, error: sessionError } = await supabaseClient.auth.getSession();
+
+  const maxAttempts = 5;
+  let currentId = identifier;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // always generate a short identifier before checking
+    const short = (typeof crypto !== "undefined" && (crypto as any).randomUUID)
+      ? (crypto as any).randomUUID().slice(0, 8)
+      : Math.random().toString(36).slice(2, 10);
+    currentId = `${identifier}-${short}`;
+
+    const channels = await supabaseClient.getChannels();
+    const channelName = `${base}:${currentId}`;
+    const channelExists = channels?.channels?.some((ch: any) => ch.name === channelName);
+
+    if (!channelExists) {
+      return channelName;
+    }
+  }
+
+  // final fallback using a UUID or random string
+  const finalId = (typeof crypto !== "undefined" && (crypto as any).randomUUID)
+    ? (crypto as any).randomUUID()
+    : Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+  return `${base}:${identifier}-${finalId}`;
+}
+
 export function useRealtimeGroupList() {
   const session = useSession();
   const [groups, setGroups] = useState<GroupMember[]>([]);
@@ -38,8 +71,12 @@ export function useRealtimeGroupList() {
           setGroups(data || []);
         }
 
+        const channelName = await buildChannelName("group_members", userId);
+
+        console.log(channelName)
+
         channel = supabaseClient
-          .channel(`group_members:${userId}`, {
+          .channel(channelName, {
             config: {
               broadcast: { self: true },
               presence: { key: userId }
@@ -119,9 +156,12 @@ export function useRealtimeGroupInfo(groupId: string) {
           setGroupInfo(data);
         }
 
+        const channelName = await buildChannelName("groups", groupId);
+
+        console.log(channelName)
 
         channel = supabaseClient
-          .channel(`groups:${groupId}`, {
+          .channel(channelName, {
             config: {
               broadcast: { self: true },
               presence: { key: groupId }
