@@ -1,11 +1,12 @@
 // Prisma schema for NextAuth + encrypted provider tokens + export jobs
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
 generator client {
   provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -288,4 +289,16 @@ model PlayEvent {
 
   @@index([groupId, createdAt], name: "idx_playevents_group_created")
   @@map("play_events")
+}
+
+model LastReadMessage {
+  id        String   @id @default(uuid())
+  groupId   String
+  userId    String
+  messageId String
+  createdAt DateTime @default(now())
+  type      String  @default("message")
+
+  @@unique([groupId, userId, type], name: "unique_last_read_type")
+  @@map("last_read_messages")
 }
