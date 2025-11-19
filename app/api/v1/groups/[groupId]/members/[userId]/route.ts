@@ -38,7 +38,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ grou
       return NextResponse.json({ error: 'Member not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ member: membership });
+    const user = await prisma.user.findUnique({
+      where: {
+        id: membership.userId,
+      },
+    });
+
+    return NextResponse.json({ member: membership, user: user });
   } catch (e) {
     return NextResponse.json({ error: 'Failed to fetch member' }, { status: 500 });
   }
