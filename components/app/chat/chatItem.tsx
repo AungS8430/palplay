@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Reply } from "lucide-react";
 import SpotifyEmbed from "@/components/app/embeds/spotify";
 import YouTubeEmbed from "@/components/app/embeds/youtube";
+import ClientDateTime from "@/components/clientDateTime";
 
 export default function ChatItem({ groupId, out, text, authorId, replyToId, spotifyUri, youtubeId, createdAt, editedAt }: { groupId: string; out: boolean; text: string; authorId: string; replyToId?: string, spotifyUri?: string, youtubeId?: string, createdAt: string; editedAt?: string }) {
   const [memberData, setMemberData] = useState<{ member: any; user: any } | null>(null);
@@ -63,7 +64,7 @@ export default function ChatItem({ groupId, out, text, authorId, replyToId, spot
           {text}
           {
             (spotifyUri || youtubeId) && (
-              <Tabs className={"mt-2 rounded-lg"} defaultValue={spotifyUri ? "spotify" : "youtube"}>
+              <Tabs className={"mt-2 rounded-lg"}>
                 <TabsList>
                   {spotifyUri && <TabsTrigger value="spotify">Spotify</TabsTrigger>}
                   {youtubeId && <TabsTrigger value="youtube">YouTube</TabsTrigger>}
@@ -85,6 +86,7 @@ export default function ChatItem({ groupId, out, text, authorId, replyToId, spot
               </Tabs>
             )
           }
+          <p className={"text-xs font-semibold " + (out ? "text-neutral-600" : "text-neutral-400")}><ClientDateTime isoString={createdAt} /> { editedAt && (<span> · Edited At <ClientDateTime isoString={editedAt} /></span>)}</p>
         </div>
       </div>
     </div>

@@ -142,7 +142,6 @@ export default function SpotifyEmbed({ uri }: { uri: string }) {
   return (
     <div className="w-96">
       <div ref={embedRef} />
-      {!playerLoaded && <p>Loading...</p>}
     </div>
   );
 }
