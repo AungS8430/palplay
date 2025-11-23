@@ -22,23 +22,44 @@ declare global {
   interface Window {
     onSpotifyIframeApiReady: (IFrameAPI: SpotifyIframeApi) => void;
     SpotifyIframeApi?: SpotifyIframeApi;
+    spotifyControllerQueue?: Array<() => void>;
+    spotifyControllerInitializing?: boolean;
   }
 }
+
+// Global queue to serialize controller creation
+const processQueue = () => {
+  if (window.spotifyControllerInitializing || !window.spotifyControllerQueue?.length) {
+    return;
+  }
+
+  window.spotifyControllerInitializing = true;
+  const next = window.spotifyControllerQueue.shift();
+  if (next) {
+    next();
+  }
+};
 
 export default function SpotifyEmbed({ uri }: { uri: string }) {
   const embedRef = useRef<HTMLDivElement>(null);
   const spotifyEmbedControllerRef = useRef<SpotifyEmbedController | null>(null);
   const [iFrameAPI, setIFrameAPI] = useState<SpotifyIframeApi | undefined>(undefined);
   const [playerLoaded, setPlayerLoaded] = useState(false);
-  const initializingRef = useRef(false);
+  const queuedRef = useRef(false);
+
+  // Initialize global queue
+  useEffect(() => {
+    if (!window.spotifyControllerQueue) {
+      window.spotifyControllerQueue = [];
+      window.spotifyControllerInitializing = false;
+    }
+  }, []);
 
   // Load Spotify API script only once globally
   useEffect(() => {
-    // Check if script is already loaded
     const existingScript = document.querySelector('script[src="https://open.spotify.com/embed/iframe-api/v1"]');
 
     if (existingScript) {
-      // If script exists and API is ready, use it immediately
       if (window.SpotifyIframeApi) {
         setIFrameAPI(window.SpotifyIframeApi);
       }
@@ -49,8 +70,6 @@ export default function SpotifyEmbed({ uri }: { uri: string }) {
     script.src = "https://open.spotify.com/embed/iframe-api/v1";
     script.async = true;
     document.body.appendChild(script);
-
-    // Don't remove the script on cleanup - it should persist
   }, []);
 
   useEffect(() => {
@@ -65,57 +84,56 @@ export default function SpotifyEmbed({ uri }: { uri: string }) {
   }, [iFrameAPI]);
 
   useEffect(() => {
-    if (iFrameAPI === undefined || initializingRef.current) {
+    if (iFrameAPI === undefined || queuedRef.current) {
       return;
     }
 
-    // Reset player loaded state when component mounts
     setPlayerLoaded(false);
-    initializingRef.current = true;
+    queuedRef.current = true;
 
-    iFrameAPI.createController(
-      embedRef.current,
-      {
-        width: "100%",
-        height: "160",
-        uri: uri,
-      },
-      (spotifyEmbedController: SpotifyEmbedController) => {
-        spotifyEmbedController.addListener("ready", () => {
-          setPlayerLoaded(true);
-          initializingRef.current = false;
-        });
+    const createController = () => {
+      iFrameAPI.createController(
+        embedRef.current,
+        {
+          width: "100%",
+          height: "160",
+          uri: uri,
+        },
+        (spotifyEmbedController: SpotifyEmbedController) => {
+          spotifyEmbedController.addListener("ready", () => {
+            setPlayerLoaded(true);
+            window.spotifyControllerInitializing = false;
+            processQueue(); // Process next in queue
+          });
 
-        const handlePlaybackUpdate = (e: any) => {
-          const { position, duration, isBuffering, isPaused, playingURI } =
-            e.data;
-          console.log(
-            `Playback State updates:
+          const handlePlaybackUpdate = (e: any) => {
+            const { position, duration, isBuffering, isPaused, playingURI } = e.data;
+            console.log(
+              `Playback State updates:
               position - ${position},
               duration - ${duration},
               isBuffering - ${isBuffering},
               isPaused - ${isPaused},
               playingURI - ${playingURI},
               duration - ${duration}`
-          );
-        };
+            );
+          };
 
-        spotifyEmbedController.addListener(
-          "playback_update",
-          handlePlaybackUpdate
-        );
+          spotifyEmbedController.addListener("playback_update", handlePlaybackUpdate);
+          spotifyEmbedController.addListener("playback_started", (e: any) => {
+            const { playingURI } = e.data;
+            console.log(`The playback has started for: ${playingURI}`);
+          });
 
-        spotifyEmbedController.addListener("playback_started", (e: any) => {
-          const { playingURI } = e.data;
-          console.log(`The playback has started for: ${playingURI}`);
-        });
+          spotifyEmbedControllerRef.current = spotifyEmbedController;
+        }
+      );
+    };
 
-        spotifyEmbedControllerRef.current = spotifyEmbedController;
-      }
-    );
+    window.spotifyControllerQueue?.push(createController);
+    processQueue();
 
     return () => {
-      // Clean up the controller when component unmounts
       if (spotifyEmbedControllerRef.current) {
         spotifyEmbedControllerRef.current.removeListener("playback_update");
         spotifyEmbedControllerRef.current.removeListener("playback_started");
@@ -123,7 +141,7 @@ export default function SpotifyEmbed({ uri }: { uri: string }) {
       }
       spotifyEmbedControllerRef.current = null;
       setPlayerLoaded(false);
-      initializingRef.current = false;
+      queuedRef.current = false;
     };
   }, [iFrameAPI, uri]);
 

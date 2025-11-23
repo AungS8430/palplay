@@ -64,7 +64,7 @@ export default function ChatItem({ groupId, out, text, authorId, replyToId, spot
           {text}
           {
             (spotifyUri || youtubeId) && (
-              <Tabs className={"mt-2 rounded-lg"}>
+              <Tabs className={"mt-2 rounded-lg"} defaultValue={spotifyUri ? "spotify" : "youtube"}>
                 <TabsList>
                   {spotifyUri && <TabsTrigger value="spotify">Spotify</TabsTrigger>}
                   {youtubeId && <TabsTrigger value="youtube">YouTube</TabsTrigger>}
