@@ -11,6 +11,7 @@ import ClientDateTime from "@/components/clientDateTime";
 export default function ChatItem({ groupId, out, text, authorId, replyToId, spotifyUri, youtubeId, createdAt, editedAt }: { groupId: string; out: boolean; text: string; authorId: string; replyToId?: string, spotifyUri?: string, youtubeId?: string, createdAt: string; editedAt?: string }) {
   const [memberData, setMemberData] = useState<{ member: any; user: any } | null>(null);
   const [replyPreview, setReplyPreview] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState(spotifyUri ? "spotify" : "youtube");
 
   useEffect(() => {
     fetch(`/api/v1/groups/${groupId}/members/${authorId}`, {
@@ -64,7 +65,7 @@ export default function ChatItem({ groupId, out, text, authorId, replyToId, spot
           {text}
           {
             (spotifyUri || youtubeId) && (
-              <Tabs className={"mt-2 rounded-lg"} defaultValue={spotifyUri ? "spotify" : "youtube"}>
+              <Tabs className={"mt-2 rounded-lg"} value={activeTab} onValueChange={setActiveTab}>
                 <TabsList>
                   {spotifyUri && <TabsTrigger value="spotify">Spotify</TabsTrigger>}
                   {youtubeId && <TabsTrigger value="youtube">YouTube</TabsTrigger>}
