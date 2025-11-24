@@ -24,6 +24,7 @@ declare global {
     SpotifyIframeApi?: SpotifyIframeApi;
     spotifyControllerQueue?: Array<() => void>;
     spotifyControllerInitializing?: boolean;
+    spotifyApiReadyCallbacks?: Array<(api: SpotifyIframeApi) => void>;
   }
 }
 
@@ -53,6 +54,9 @@ export default function SpotifyEmbed({ uri }: { uri: string }) {
       window.spotifyControllerQueue = [];
       window.spotifyControllerInitializing = false;
     }
+    if (!window.spotifyApiReadyCallbacks) {
+      window.spotifyApiReadyCallbacks = [];
+    }
   }, []);
 
   // Load Spotify API script only once globally
@@ -77,14 +81,40 @@ export default function SpotifyEmbed({ uri }: { uri: string }) {
       return;
     }
 
-    window.onSpotifyIframeApiReady = (SpotifyIframeApi: SpotifyIframeApi) => {
-      window.SpotifyIframeApi = SpotifyIframeApi;
-      setIFrameAPI(SpotifyIframeApi);
+    // Set up the global callback once
+    if (!window.onSpotifyIframeApiReady) {
+      window.onSpotifyIframeApiReady = (SpotifyIframeApi: SpotifyIframeApi) => {
+        window.SpotifyIframeApi = SpotifyIframeApi;
+        // Call all registered callbacks
+        window.spotifyApiReadyCallbacks?.forEach(callback => callback(SpotifyIframeApi));
+        // Clear the callbacks array
+        window.spotifyApiReadyCallbacks = [];
+      };
+    }
+
+    // Register this component's callback
+    const callback = (api: SpotifyIframeApi) => {
+      setIFrameAPI(api);
+    };
+    window.spotifyApiReadyCallbacks?.push(callback);
+
+    // Cleanup: remove this callback if component unmounts before API is ready
+    return () => {
+      if (window.spotifyApiReadyCallbacks) {
+        const index = window.spotifyApiReadyCallbacks.indexOf(callback);
+        if (index > -1) {
+          window.spotifyApiReadyCallbacks.splice(index, 1);
+        }
+      }
     };
   }, [iFrameAPI]);
 
   useEffect(() => {
-    if (iFrameAPI === undefined || queuedRef.current) {
+    if (iFrameAPI === undefined) {
+      return;
+    }
+
+    if (queuedRef.current) {
       return;
     }
 
@@ -92,6 +122,12 @@ export default function SpotifyEmbed({ uri }: { uri: string }) {
     queuedRef.current = true;
 
     const createController = () => {
+      if (!embedRef.current) {
+        window.spotifyControllerInitializing = false;
+        processQueue();
+        return;
+      }
+
       iFrameAPI.createController(
         embedRef.current,
         {
