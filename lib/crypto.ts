@@ -1,14 +1,27 @@
+// TypeScript
+// `lib/crypto.ts`
+
 import crypto from "crypto";
 
-const KEY_B64 = process.env.TOKEN_ENCRYPTION_KEY;
-if (!KEY_B64) {
-  throw new Error("TOKEN_ENCRYPTION_KEY environment variable is required");
+let KEY_CACHE: Buffer | undefined;
+
+function getKey(): Buffer {
+  if (KEY_CACHE) return KEY_CACHE;
+
+  const KEY_B64 = process.env.TOKEN_ENCRYPTION_KEY;
+  if (!KEY_B64) {
+    throw new Error("TOKEN_ENCRYPTION_KEY environment variable is required");
+  }
+  const key = Buffer.from(KEY_B64, "base64");
+  if (key.length !== 32) throw new Error("TOKEN_ENCRYPTION_KEY must decode to 32 bytes");
+
+  KEY_CACHE = key;
+  return KEY_CACHE;
 }
-const KEY = Buffer.from(KEY_B64, "base64");
-if (KEY.length !== 32) throw new Error("TOKEN_ENCRYPTION_KEY must decode to 32 bytes");
 
 // AES-256-GCM: store iv(12) + tag(16) + ciphertext
 export function encrypt(plaintext: string): string {
+  const KEY = getKey();
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", KEY, iv);
   const ct = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
@@ -17,6 +30,7 @@ export function encrypt(plaintext: string): string {
 }
 
 export function decrypt(blobBase64: string): string {
+  const KEY = getKey();
   const data = Buffer.from(blobBase64, "base64");
   const iv = data.slice(0, 12);
   const tag = data.slice(12, 28);
