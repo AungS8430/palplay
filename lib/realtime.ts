@@ -209,3 +209,88 @@ export function useRealtimeGroupInfo(groupId: string) {
 
   return { groupInfo, connected };
 }
+
+export function useRealtimeChatMessages(groupId: string) {
+  const [messages, setMessages] = useState<any[]>([]);
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    if (!groupId) return;
+
+    let channel: any = null;
+
+    const setupRealtime = async () => {
+      try {
+        const supabaseClient = await getAuthenticatedSupabaseClient();
+
+        const { data: { session: supabaseSession }, error: sessionError } = await supabaseClient.auth.getSession();
+
+        console.log("=== Chat Messages Setup ===");
+        console.log("User ID:", supabaseSession?.user?.id);
+        console.log("Group ID:", groupId);
+
+        const { data, error } = await supabaseClient
+          .from("chat_messages")
+          .select("*")
+          .eq("groupId", groupId)
+          .order("createdAt", { ascending: true });
+
+        if (error) {
+          console.error("Error fetching chat messages:", error);
+        } else {
+          setMessages(data || []);
+        }
+
+        // Use simple, consistent channel name without random ID
+        const channelName = buildChannelName(`chat_messages`, groupId);
+
+        channel = supabaseClient
+          .channel(channelName)
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "chat_messages",
+              filter: `groupId=eq.${groupId}`
+            },
+            (payload: any) => {
+              if (payload.eventType === "INSERT" && payload.new) {
+                setMessages(prev => {
+                  // Prevent duplicates
+                  if (prev.some(msg => msg.id === payload.new.id)) {
+                    return prev;
+                  }
+                  return [...prev, payload.new as any];
+                });
+              } else if (payload.eventType === "UPDATE" && payload.new) {
+                setMessages(prev => prev.map(msg => msg.id === payload.new.id ? payload.new : msg));
+              } else if (payload.eventType === "DELETE" && payload.old) {
+                setMessages(prev => prev.filter(msg => msg.id !== payload.old.id));
+              }
+            }
+          )
+          .subscribe((status: string, err: any) => {
+            if (err) {
+              console.error("Chat messages realtime subscription error:", err);
+            }
+            setConnected(status === "SUBSCRIBED");
+          });
+      } catch (error) {
+        console.error("Failed to setup chat messages realtime:", error);
+        setConnected(false);
+      }
+    };
+
+    setupRealtime();
+
+    return () => {
+      if (channel) {
+        channel.unsubscribe();
+      }
+      setConnected(false);
+    };
+  }, [groupId]);
+
+  return { messages, connected };
+}
