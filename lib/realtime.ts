@@ -233,7 +233,7 @@ export function useRealtimeChatMessages(groupId: string) {
           .from("chat_messages")
           .select("*")
           .eq("groupId", groupId)
-          .order("createdAt", { ascending: true });
+          .order("createdAt", { ascending: false });
 
         if (error) {
           console.error("Error fetching chat messages:", error);

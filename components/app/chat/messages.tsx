@@ -7,7 +7,7 @@ export default function Messages({ groupId, userId }: { groupId: string; userId:
   const { messages, connected } = useRealtimeChatMessages(groupId!);
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col-reverse gap-2 h-[calc(100%-54px)] overflow-scroll">
       {
         connected && messages.map((message) => (
           <ChatItem key={message.id} groupId={groupId} out={message.authorId == userId} text={message.text} authorId={message.authorId} replyToId={message.replyToId} spotifyUri={message.spotifyUri} youtubeId={message.youtubeId} createdAt={message.createdAt} editedAt={message.editedAt} />

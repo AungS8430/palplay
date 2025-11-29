@@ -1,7 +1,7 @@
 "use client";
 
 export default function ClientDateTime({ isoString }: { isoString: string }) {
-  const date = new Date(isoString);
+  const date = new Date(isoString.replace(' ', 'T') + (isoString.includes('Z') ? '' : 'Z'));
   const formatted = date.toLocaleString(undefined, {
     year: 'numeric',
     month: 'short',

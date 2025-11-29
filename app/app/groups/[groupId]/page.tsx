@@ -21,9 +21,7 @@ export default async function GroupPage({ params }: { params: Promise<{ groupId:
       <div className="self-end w-full pt-4">
         <MessageField groupId={groupId} />
       </div>
-      <div className="flex flex-col h-[calc(100%-54px)]">
-        <Messages groupId={groupId} userId={userId} />
-      </div>
+      <Messages groupId={groupId} userId={userId} />
     </div>
   )
 }
