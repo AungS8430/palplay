@@ -43,16 +43,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ grou
   }
 }
 
-export default async function POST(request: NextRequest, { params }: { params: Promise<{ groupId: string }> }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ groupId: string }> }) {
   const { groupId } = await params;
 
-  const searchParams = request.nextUrl.searchParams;
-
-  const text = searchParams.get("text");
-  const postId = searchParams.get("postId");
-  const replyToId = searchParams.get("replyToId");
-  const spotifyUri = searchParams.get("spotifyUri");
-  const youtubeId = searchParams.get("youtubeId");
+  const body = await request.json();
+  const { text, postId, replyToId, spotifyUri, youtubeId } = body;
 
   const session = await getServerSession(authOptions);
 

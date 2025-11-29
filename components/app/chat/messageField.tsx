@@ -24,7 +24,8 @@ interface Track {
   coverUrl: string;
 }
 
-export default function MessageField() {
+export default function MessageField({ groupId }: { groupId: string }) {
+  const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<Array<any>>([]);
   const [currentSong, setCurrentSong] = useState<Track | null>(null);
@@ -34,6 +35,7 @@ export default function MessageField() {
     const target = e.currentTarget;
     target.style.height = 'auto';
     target.style.height = `${target.scrollHeight}px`;
+    setMessage(target.value);
   };
 
   useEffect(() => {
@@ -71,8 +73,24 @@ export default function MessageField() {
     setSelectOpen(false);
   }
 
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    console.log("Submitting message:", { message, currentSong });
+    e.preventDefault();
+    if (!message || message.trim().length === 0) return;
+
+    fetch(`/api/v1/groups/${groupId}/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        text: message,
+        spotifyUri: currentSong ? currentSong.spotifyUri : null,
+      }),
+    })
+  }
   return (
-    <form className="flex flex-row w-full gap-2">
+    <form className="flex flex-row w-full gap-2" onSubmit={handleSubmit}>
       <Popover open={selectOpen} onOpenChange={setSelectOpen}>
         <ButtonGroup>
           <PopoverTrigger asChild>
@@ -107,7 +125,7 @@ export default function MessageField() {
           </div>
         </PopoverContent>
       </Popover>
-      <Textarea rows={1} className="resize-none overflow-hidden min-h-auto! grow" placeholder="Type your message here..." onInput={handleInput} />
+      <Textarea rows={1} className="resize-none overflow-hidden min-h-auto! grow" placeholder="Type your message here..." onInput={handleInput} value={message} />
       <Button type="submit" size="icon"><Send /></Button>
     </form>
   )
