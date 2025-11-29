@@ -3,13 +3,18 @@
 import { useState, useEffect } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import {
+  ButtonGroup,
+  ButtonGroupSeparator,
+  ButtonGroupText,
+} from "@/components/ui/button-group";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { Send, Music } from "lucide-react";
+import { Send, Music, CircleX } from "lucide-react";
 
 interface Track {
   title: string;
@@ -69,9 +74,15 @@ export default function MessageField() {
   return (
     <form className="flex flex-row w-full gap-2">
       <Popover open={selectOpen} onOpenChange={setSelectOpen}>
-        <PopoverTrigger asChild>
-          <Button type="button" size={currentSong ? "default" : "icon"} variant="secondary"><Music />{currentSong && ` ${currentSong.title.substring(0, 20)}${currentSong.title.length > 20 ? "..." : ""}`}</Button>
-        </PopoverTrigger>
+        <ButtonGroup>
+          <PopoverTrigger asChild>
+            <Button type="button" size={currentSong ? "default" : "icon"} variant="secondary"><Music />{currentSong && ` ${currentSong.title.substring(0, 20)}${currentSong.title.length > 20 ? "..." : ""}`}</Button>
+          </PopoverTrigger>
+          {currentSong && (
+            <Button size="icon" variant="secondary" onClick={() => setCurrentSong(null)}><CircleX /></Button>
+          )}
+        </ButtonGroup>
+
         <PopoverContent align="start">
           <div className="flex flex-col gap-2">
             <p className="text-sm">Add a song</p>
