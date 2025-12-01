@@ -238,11 +238,13 @@ export function useRealtimeChatMessages(groupId: string) {
         if (error) {
           console.error("Error fetching chat messages:", error);
         } else {
+          console.log("Initial messages count:", data?.length);
           setMessages(data || []);
         }
 
         // Use simple, consistent channel name without random ID
-        const channelName = buildChannelName(`chat_messages`, groupId);
+        const channelName = buildChannelName("chat_messages", groupId);
+        console.log("Channel name:", channelName);
 
         channel = supabaseClient
           .channel(channelName)
@@ -255,13 +257,16 @@ export function useRealtimeChatMessages(groupId: string) {
               filter: `groupId=eq.${groupId}`
             },
             (payload: any) => {
+              console.log("=== Chat Message Event ===", payload);
+              console.log("Event type:", payload.eventType);
+
               if (payload.eventType === "INSERT" && payload.new) {
                 setMessages(prev => {
                   // Prevent duplicates
                   if (prev.some(msg => msg.id === payload.new.id)) {
                     return prev;
                   }
-                  return [...prev, payload.new as any];
+                  return [payload.new as any, ...prev];
                 });
               } else if (payload.eventType === "UPDATE" && payload.new) {
                 setMessages(prev => prev.map(msg => msg.id === payload.new.id ? payload.new : msg));
@@ -271,6 +276,7 @@ export function useRealtimeChatMessages(groupId: string) {
             }
           )
           .subscribe((status: string, err: any) => {
+            console.log("Chat subscription status:", status);
             if (err) {
               console.error("Chat messages realtime subscription error:", err);
             }

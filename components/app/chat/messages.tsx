@@ -2,6 +2,7 @@
 
 import { useRealtimeChatMessages } from "@/lib/realtime";
 import ChatItem from "./chatItem";
+import { useEffect } from "react";
 
 export default function Messages({ groupId, userId }: { groupId: string; userId: string }) {
   const { messages, connected } = useRealtimeChatMessages(groupId!);
