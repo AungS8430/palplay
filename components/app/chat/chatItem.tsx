@@ -8,22 +8,14 @@ import SpotifyEmbed from "@/components/app/embeds/spotify";
 import YouTubeEmbed from "@/components/app/embeds/youtube";
 import ClientDateTime from "@/components/clientDateTime";
 
-export default function ChatItem({ groupId, out, text, authorId, replyToId, spotifyUri, youtubeId, createdAt, editedAt }: { groupId: string; out: boolean; text: string; authorId: string; replyToId?: string, spotifyUri?: string, youtubeId?: string, createdAt: string; editedAt?: string }) {
-  const [memberData, setMemberData] = useState<{ member: any; user: any } | null>(null);
+interface MemberData {
+  member: any;
+  user: any;
+}
+
+export default function ChatItem({ groupId, out, text, replyToId, spotifyUri, youtubeId, createdAt, editedAt, memberData: memberDataProp }: { groupId: string; out: boolean; text: string; replyToId?: string, spotifyUri?: string, youtubeId?: string, createdAt: string; editedAt?: string; memberData?: MemberData }) {
   const [replyPreview, setReplyPreview] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(spotifyUri ? "spotify" : "youtube");
-
-  useEffect(() => {
-    fetch(`/api/v1/groups/${groupId}/members/${authorId}`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    })
-      .then(res => res.json())
-      .then(data => setMemberData(data))
-      .catch(error => console.error("Error fetching member data:", error));
-  }, [groupId, authorId]);
 
   useEffect(() => {
     if (replyToId) {
@@ -37,9 +29,9 @@ export default function ChatItem({ groupId, out, text, authorId, replyToId, spot
         .then(data => setReplyPreview(data.text))
         .catch(error => console.error("Error fetching replied message:", error));
     }
-  }, [replyToId]);
+  }, [replyToId, groupId]);
 
-  if (!memberData) {
+  if (!memberDataProp) {
     return <div>Loading...</div>;
   }
 
@@ -48,8 +40,8 @@ export default function ChatItem({ groupId, out, text, authorId, replyToId, spot
       {
         !out && (
           <Avatar className="w-9 h-9">
-            <AvatarImage src={memberData.user.name} />
-            <AvatarFallback>{memberData.user.name.split(/[^A-Za-z]/)[0][0]}{(memberData.user.name.split(/[^A-Za-z]/)?.length && memberData.user.name.split(/[^A-Za-z]/)?.length || 0 > 1) && memberData.user.name.split(/[^A-Za-z]/)[1][0]}</AvatarFallback>
+            <AvatarImage src={memberDataProp.user.name} />
+            <AvatarFallback>{memberDataProp.user.name.split(/[^A-Za-z]/)[0][0]}{(memberDataProp.user.name.split(/[^A-Za-z]/)?.length && memberDataProp.user.name.split(/[^A-Za-z]/)?.length || 0 > 1) && memberDataProp.user.name.split(/[^A-Za-z]/)[1][0]}</AvatarFallback>
           </Avatar>
         )
       }
