@@ -1,22 +1,58 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Reply, EllipsisVertical } from "lucide-react";
+import { Reply, EllipsisVertical, Trash } from "lucide-react";
 import SpotifyEmbed from "@/components/app/embeds/spotify";
 import YouTubeEmbed from "@/components/app/embeds/youtube";
 import ClientDateTime from "@/components/clientDateTime";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ChatContext } from "@/components/app/chat/chatContext";
 
 interface MemberData {
   member: any;
   user: any;
 }
 
-export default function ChatItem({ groupId, out, text, replyToId, spotifyUri, youtubeId, createdAt, editedAt, memberData: memberDataProp }: { groupId: string; out: boolean; text: string; replyToId?: string, spotifyUri?: string, youtubeId?: string, createdAt: string; editedAt?: string; memberData?: MemberData }) {
+interface ChatItemProps {
+  messageId: string;
+  groupId: string;
+  out: boolean;
+  text: string;
+  replyToId?: string;
+  spotifyUri?: string;
+  youtubeId?: string;
+  createdAt: string;
+  editedAt?: string;
+  memberData?: MemberData;
+}
+
+export default function ChatItem({
+  messageId,
+  groupId,
+  out,
+  text,
+  replyToId,
+  spotifyUri,
+  youtubeId,
+  createdAt,
+  editedAt,
+  memberData: memberDataProp,
+}: ChatItemProps) {
+  const context = useContext(ChatContext);
+
   const [replyPreview, setReplyPreview] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(spotifyUri ? "spotify" : "youtube");
+  const { replyingTo, setReplyingTo } = context || {};
 
   useEffect(() => {
     if (replyToId) {
@@ -39,19 +75,14 @@ export default function ChatItem({ groupId, out, text, replyToId, spotifyUri, yo
   return (
     <div className={"flex flex-row gap-2 items-end " + (out ? " justify-end" : " justify-start")}>
       {
-        !out ? (
-          <Avatar className="w-9 h-9">
+        !out && (
+          <Avatar className="w-9 h-9 order-first">
             <AvatarImage src={memberDataProp.user.name} />
             <AvatarFallback>{memberDataProp.user.name.split(/[^A-Za-z]/)[0][0]}{(memberDataProp.user.name.split(/[^A-Za-z]/)?.length && memberDataProp.user.name.split(/[^A-Za-z]/)?.length || 0 > 1) && memberDataProp.user.name.split(/[^A-Za-z]/)[1][0]}</AvatarFallback>
           </Avatar>
-        ) : (
-          <div className="flex flex-row">
-            <Button size="icon-sm" variant="ghost" className="rounded-full"><EllipsisVertical className="text-neutral-400" /></Button>
-            <Button size="icon-sm" variant="ghost" className="rounded-full"><Reply className="text-neutral-400" /></Button>
-          </div>
         )
       }
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 ">
         {replyToId && (
           <div className={"text-xs italic text-neutral-300 px-4 truncate" + (out ? " text-right" : " text-left")}>
             {/* Placeholder for replied message preview */}
@@ -88,14 +119,37 @@ export default function ChatItem({ groupId, out, text, replyToId, spotifyUri, yo
           <p className={"text-xs font-semibold " + (out ? "text-neutral-600" : "text-neutral-400")}><ClientDateTime isoString={createdAt} /> { editedAt && (<span> · Edited At <ClientDateTime isoString={editedAt} /></span>)}</p>
         </div>
       </div>
-      {
-        !out && (
-          <div className="flex flex-row">
-            <Button size="icon-sm" variant="ghost" className="rounded-full"><Reply className="text-neutral-400" /></Button>
+      <div className={`flex ` + (out ? "order-first flex-row" : "flex-row-reverse")}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
             <Button size="icon-sm" variant="ghost" className="rounded-full"><EllipsisVertical className="text-neutral-400" /></Button>
-          </div>
-        )
-      }
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuLabel>Options</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {
+              (out || memberDataProp.member.role == "owner" || memberDataProp.member.role == "admin") && <DropdownMenuItem><Trash />Delete Message</DropdownMenuItem>
+            }
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          className="rounded-full"
+          onClick={() => {
+            setReplyingTo && setReplyingTo({
+              messageId: messageId || null,
+              messageText: text,
+              memberData: memberDataProp,
+              spotifyUri: spotifyUri || null,
+              youtubeId: youtubeId || null,
+              out: out,
+            })
+          }}
+        >
+          <Reply className="text-neutral-400" />
+        </Button>
+      </div>
     </div>
   )
 }

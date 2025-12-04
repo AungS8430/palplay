@@ -18,13 +18,11 @@ export default function Messages({ groupId, userId }: { groupId: string; userId:
 
     const uniqueAuthorIds = [...new Set(messages.map(msg => msg.authorId))];
 
-    // Find author IDs that are not yet in cache using callback to get current cache state
     setMemberDataCache(prevCache => {
       const missingAuthorIds = uniqueAuthorIds.filter(id => !prevCache[id]);
 
       if (missingAuthorIds.length === 0) return prevCache;
 
-      // Fetch all missing member data in parallel
       Promise.all(
         missingAuthorIds.map(authorId =>
           fetch(`/api/v1/groups/${groupId}/members/${authorId}`, {
@@ -62,6 +60,7 @@ export default function Messages({ groupId, userId }: { groupId: string; userId:
         connected && messages.map((message) => (
           <ChatItem
             key={message.id}
+            messageId={message.id}
             groupId={groupId}
             out={message.authorId == userId}
             text={message.text}
