@@ -26,9 +26,9 @@ export default function GroupTabs({ groupId }: { groupId: string }) {
         <Link href={`/app/groups/${groupId}`} className="w-full">
           <Button variant={pathname == `/app/groups/${groupId}` ? "outline" : "ghost"} className="w-full text-semibold text-neutral-300 hover:cursor-pointer">Chat</Button>
         </Link>
-        <Link href={`/app/groups/${groupId}/posts`} className="w-full">
-          <Button variant={pathname.includes(`/app/groups/${groupId}/posts`) ? "outline" : "ghost"} className="w-full text-neutral-300 hover:cursor-pointer">Posts</Button>
-        </Link>
+        {/*<Link href={`/app/groups/${groupId}/posts`} className="w-full">*/}
+        {/*  <Button variant={pathname.includes(`/app/groups/${groupId}/posts`) ? "outline" : "ghost"} className="w-full text-neutral-300 hover:cursor-pointer">Posts</Button>*/}
+        {/*</Link>*/}
         <Link href={`/app/groups/${groupId}/playlist`} className="w-full">
           <Button variant={pathname.includes(`/app/groups/${groupId}/playlist`) ? "outline" : "ghost"} className="w-full text-neutral-300 hover:cursor-pointer">Playlist</Button>
         </Link>
