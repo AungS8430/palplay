@@ -219,6 +219,9 @@ model GroupPlaylistItem {
   spotifyUri String?
   youtubeId  String?
   title      String?
+  artist     String?
+  durationSec Int?
+  thumbnailUrl String?
   note       String?  @db.Text
   position   String?  @db.VarChar(255)
   createdAt  DateTime @default(now())
