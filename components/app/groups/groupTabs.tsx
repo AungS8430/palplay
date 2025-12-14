@@ -15,11 +15,10 @@ export default function GroupTabs({ groupId }: { groupId: string }) {
   }
   return (
     <div className="border-b w-full p-2 flex flex-col gap-2 bg-sidebar">
-      <div className="flex justify-end">
-        <h1 className="mx-auto text-center font-semibold text-neutral-200 text-lg">{groupInfo.name}</h1>
-        <div>
-          <Button variant="ghost" size="icon"><Settings /></Button>
-        </div>
+      <div className="flex justify-between items-center">
+        <div className="w-10"></div>
+        <h1 className="text-center font-semibold text-neutral-200 text-lg">{groupInfo.name}</h1>
+        <Button variant="ghost" size="icon"><Settings /></Button>
       </div>
 
       <div className="flex flex-row mx-auto px-2 gap-2 justify-between w-full">
