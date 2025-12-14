@@ -300,3 +300,79 @@ export function useRealtimeChatMessages(groupId: string) {
 
   return { messages, connected };
 }
+
+export function useRealtimeGroupPlaylist(groupId: string) {
+  const [playlistItems, setPlaylistItems] = useState<any[]>([]);
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    if (!groupId) return;
+
+    let channel: any = null;
+
+    const setupRealtime = async () => {
+      try {
+        const supabaseClient = await getAuthenticatedSupabaseClient();
+
+        const { data, error } = await supabaseClient
+          .from("group_playlist_items")
+          .select("*")
+          .eq("groupId", groupId)
+          .order("position", { ascending: true });
+
+        if (error) {
+          console.error("Error fetching playlist items:", error);
+        } else {
+          setPlaylistItems(data || []);
+        }
+
+        const channelName = await buildChannelName("group_playlist", groupId);
+        console.log(channelName)
+
+        channel = supabaseClient
+          .channel(channelName)
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "group_playlist_items",
+              filter: `groupId=eq.${groupId}`
+            },
+            (payload: any) => {
+              console.log("=== Playlist Item Event ===", payload);
+              console.log("Event type:", payload.eventType);
+
+              if (payload.eventType === "INSERT" && payload.new) {
+                setPlaylistItems(prev => [...prev, payload.new as any]);
+              } else if (payload.eventType === "UPDATE" && payload.new) {
+                setPlaylistItems(prev => prev.map(item => item.id === payload.new.id ? payload.new : item));
+              } else if (payload.eventType === "DELETE" && payload.old) {
+                setPlaylistItems(prev => prev.filter(item => item.id !== payload.old.id));
+              }
+            }
+          )
+          .subscribe((status: string, err: any) => {
+            if (err) {
+              console.error("Playlist realtime subscription error:", err);
+            }
+            setConnected(status === "SUBSCRIBED");
+          });
+      } catch (error) {
+        console.error("Failed to setup playlist realtime:", error);
+        setConnected(false);
+      }
+    };
+
+    setupRealtime();
+
+    return () => {
+      if (channel) {
+        channel.unsubscribe();
+      }
+      setConnected(false);
+    };
+  }, [groupId]);
+
+  return { playlistItems, connected };
+}
