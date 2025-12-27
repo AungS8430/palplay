@@ -46,11 +46,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ grou
 export async function POST(request: NextRequest, { params }: { params: Promise<{ groupId: string }> }) {
   const { groupId } = await params;
 
-  const searchQuery = request.nextUrl.searchParams;
+  const body = await request.json();
 
-  const title = searchQuery.get("title");
-  const spotifyUri = searchQuery.get("spotifyUri");
-  const youtubeId = searchQuery.get("youtubeId");
+  const { title, spotifyUri, youtubeId, coverUrl, artist, album, durationSec } = body;
 
   const session = await getServerSession(authOptions);
 
@@ -89,6 +87,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         spotifyUri: spotifyUri || null,
         youtubeId: youtubeId || null,
         addedById: userId,
+        coverUrl: coverUrl || null,
+        artist: artist || null,
+        album: album || null,
+        durationSec: durationSec || null,
         position: getRank(lastItem.length > 0 ? lastItem[0].position : null, null),
       },
     });

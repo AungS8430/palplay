@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect, useState } from "react";
 import { useRealtimeGroupPlaylist } from "@/lib/realtime";
 import PlaylistHeader from "@/components/app/playlist/header";
 import Link from "next/link";
@@ -16,14 +16,63 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import SpotifyIcon from "@/components/icons/spotify";
 import YoutubeIcon from "@/components/icons/youtube";
 import { EllipsisVertical, Search, Plus } from 'lucide-react';
 
-export default function GroupPlaylistPage({ params }: { params: Promise<{ groupId: string }> }) {
+export default function GroupPlaylistItem({ params }: { params: Promise<{ groupId: string }> }) {
   const { groupId } = use(params);
-
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Array<any>>([]);
   const { playlistItems, connected } = useRealtimeGroupPlaylist(groupId);
+
+  useEffect(() => {
+    if (searchQuery.length === 0) {
+      setSearchResults([]);
+      return;
+    }
+
+    const fetchResults = async () => {
+      try {
+        const response = await fetch(`/api/v1/songs/search?q=${encodeURIComponent(searchQuery)}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        })
+        if (response.ok) {
+          const data = await response.json();
+          setSearchResults(data || []);
+          console.log(data)
+        } else {
+          console.error("Error fetching search results:", response.statusText);
+        }
+      } catch (error) {
+        console.error("Error fetching search results:", error);
+      }
+    };
+
+    fetchResults();
+  }, [searchQuery]);
+
+  function handleAddTrack(track: any) {
+    fetch(`/api/v1/groups/${groupId}/playlist`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(track),
+    })
+  }
 
   return (
     <div className="p-4 space-y-4">
@@ -42,8 +91,34 @@ export default function GroupPlaylistPage({ params }: { params: Promise<{ groupI
             <Input placeholder="Search the playlist..." />
             <Button size="icon" variant="outline"><Search /></Button>
           </ButtonGroup>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button type="button"><Plus /> Add Songs</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add Songs to Playlist</DialogTitle>
+                <DialogDescription>
+                  Search and add songs to the group playlist.
+                </DialogDescription>
+              </DialogHeader>
+              <div>
+                <Input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                <div className="mt-4 max-h-96 overflow-y-auto">
+                  {searchResults.map((track) => (
+                    <div key={track.spotifyUri} className="flex flex-row items-center gap-2 p-2 hover:bg-neutral-800 transition-colors rounded-md cursor-pointer" onClick={() => handleAddTrack(track)}>
+                      <img src={track.coverUrl} alt={track.title} className="w-10 h-10 rounded-md" />
+                      <div className="flex flex-col overflow-hidden">
+                        <p className="text-sm text-ellipsis">{track.title}</p>
+                        <p className="text-xs text-neutral-500 text-ellipsis">{track.artist} - {track.album}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
 
-          <Button><Plus /> Add Songs</Button>
         </div>
 
       </div>
@@ -66,7 +141,7 @@ export default function GroupPlaylistPage({ params }: { params: Promise<{ groupI
                 <TableCell className="text-end text-neutral-400">{index + 1}</TableCell>
                 <TableCell>
                   <div className="flex items-center">
-                    <img src={item.thumbnailUrl} alt={`${item.title} thumbnail`} className="w-12 h-12 mr-4 object-cover" />
+                    <img src={item.coverUrl} alt={`${item.title} thumbnail`} className="w-12 h-12 mr-4 rounded-md object-cover" />
                     <span>{item.title}</span>
                   </div>
                 </TableCell>

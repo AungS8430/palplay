@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
     artist: item.artists.map((artist: any) => artist.name).join(", "),
     album: item.album.name,
     coverUrl: item.album.images[0]?.url || "",
+    durationSec: Math.floor(item.duration_ms / 1000),
   })) as Track[];
 
   return NextResponse.json(processedData);
