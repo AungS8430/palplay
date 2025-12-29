@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
-import getRank from "@/lib/lexorank";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 
@@ -28,10 +27,9 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ g
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    await prisma.groupPlaylistItem.deleteMany({
+    await prisma.groupPlaylistItem.delete({
       where: {
         id: itemId,
-        groupId: groupId,
       },
     });
 

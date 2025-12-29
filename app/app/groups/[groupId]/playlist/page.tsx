@@ -26,7 +26,13 @@ import {
 } from "@/components/ui/dialog";
 import SpotifyIcon from "@/components/icons/spotify";
 import YoutubeIcon from "@/components/icons/youtube";
-import { EllipsisVertical, Search, Plus } from 'lucide-react';
+import { EllipsisVertical, Search, Plus, Trash } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 
 export default function GroupPlaylistItem({ params }: { params: Promise<{ groupId: string }> }) {
   const { groupId } = use(params);
@@ -74,6 +80,12 @@ export default function GroupPlaylistItem({ params }: { params: Promise<{ groupI
     })
   }
 
+  function handleDeleteTrack(trackId: string) {
+    fetch(`/api/v1/groups/${groupId}/playlist/${trackId}`, {
+      method: "DELETE",
+    })
+  }
+
   return (
     <div className="p-4 space-y-4">
       <div>
@@ -106,12 +118,19 @@ export default function GroupPlaylistItem({ params }: { params: Promise<{ groupI
                 <Input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                 <div className="mt-4 max-h-96 overflow-y-auto">
                   {searchResults.map((track) => (
-                    <div key={track.spotifyUri} className="flex flex-row items-center gap-2 p-2 hover:bg-neutral-800 transition-colors rounded-md cursor-pointer" onClick={() => handleAddTrack(track)}>
+                    <div key={track.spotifyUri} className="flex flex-row items-center gap-2 p-2 hover:bg-neutral-800 transition-colors rounded-md">
                       <img src={track.coverUrl} alt={track.title} className="w-10 h-10 rounded-md" />
                       <div className="flex flex-col overflow-hidden">
                         <p className="text-sm text-ellipsis">{track.title}</p>
                         <p className="text-xs text-neutral-500 text-ellipsis">{track.artist} - {track.album}</p>
                       </div>
+                      {
+                        playlistItems.some((item) => item.spotifyUri === track.spotifyUri) ? (
+                          <Button disabled variant="outline" className="ml-auto">Added</Button>
+                        ) : (
+                          <Button className="ml-auto" size="icon" onClick={() => handleAddTrack(track)}><Plus /></Button>
+                        )
+                      }
                     </div>
                   ))}
                 </div>
@@ -148,7 +167,7 @@ export default function GroupPlaylistItem({ params }: { params: Promise<{ groupI
                 <TableCell>{item.artist}</TableCell>
                 <TableCell>{Math.floor(item.durationSec / 60)}:{(item.durationSec % 60).toString().padStart(2, '0')}</TableCell>
                 <TableCell>
-                  <ButtonGroup>
+                  <ButtonGroup className="float-right">
                     {item.spotifyUri && (
                       <Button className="bg-[#1ED760] hover:bg-[#1ED760]/80" size="icon" asChild>
                         <Link href={`https://open.spotify.com/track/${item.spotifyUri.split(':').pop()}`} target="_blank" rel="noopener noreferrer">
@@ -166,16 +185,24 @@ export default function GroupPlaylistItem({ params }: { params: Promise<{ groupI
                   </ButtonGroup>
                 </TableCell>
                 <TableCell>
-                  <Button variant="outline" size="icon">
-                    <EllipsisVertical />
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="icon">
+                        <EllipsisVertical />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem variant="destructive" onClick={() => handleDeleteTrack(item.id)}>
+                        <Trash /> Remove Track
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
-
     </div>
   )
 }

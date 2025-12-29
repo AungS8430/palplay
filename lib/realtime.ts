@@ -334,20 +334,50 @@ export function useRealtimeGroupPlaylist(groupId: string) {
           .on(
             "postgres_changes",
             {
-              event: "*",
+              event: "INSERT",
               schema: "public",
               table: "group_playlist_items",
               filter: `groupId=eq.${groupId}`
             },
             (payload: any) => {
-              console.log("=== Playlist Item Event ===", payload);
-              console.log("Event type:", payload.eventType);
-
-              if (payload.eventType === "INSERT" && payload.new) {
-                setPlaylistItems(prev => [...prev, payload.new as any]);
-              } else if (payload.eventType === "UPDATE" && payload.new) {
+              console.log("=== Playlist Item INSERT Event ===", payload);
+              if (payload.new) {
+                setPlaylistItems(prev => {
+                  // Prevent duplicates
+                  if (prev.some(item => item.id === payload.new.id)) {
+                    return prev;
+                  }
+                  return [...prev, payload.new as any];
+                });
+              }
+            }
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "UPDATE",
+              schema: "public",
+              table: "group_playlist_items",
+              filter: `groupId=eq.${groupId}`
+            },
+            (payload: any) => {
+              console.log("=== Playlist Item UPDATE Event ===", payload);
+              if (payload.new) {
                 setPlaylistItems(prev => prev.map(item => item.id === payload.new.id ? payload.new : item));
-              } else if (payload.eventType === "DELETE" && payload.old) {
+              }
+            }
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "DELETE",
+              schema: "public",
+              table: "group_playlist_items"
+            },
+            (payload: any) => {
+              console.log("=== Playlist Item DELETE Event ===", payload);
+              // For DELETE, we filter client-side since payload.old may not include groupId
+              if (payload.old && payload.old.id) {
                 setPlaylistItems(prev => prev.filter(item => item.id !== payload.old.id));
               }
             }
