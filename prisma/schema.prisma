@@ -1,11 +1,12 @@
 // Prisma schema for NextAuth + encrypted provider tokens + export jobs
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
 generator client {
   provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -27,26 +28,28 @@ model User {
   snapshots      Snapshot[]          @relation("creatorSnapshots")
   reactions      Reaction[]
   InviteLink     InviteLink[]
+  joinRequests   JoinRequest[]
 
   @@map("users")
 }
 
 model Account {
-  id                 String  @id @default(cuid())
-  userId             String
-  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type               String
-  provider           String
-  providerAccountId  String
-  refresh_token      String? @db.Text
-  access_token       String? @db.Text
-  expires_at         Int?
-  token_type         String?
-  scope              String?
-  id_token           String? @db.Text
-  session_state      String?
-  oauth_token_secret String?
-  oauth_token        String?
+  id                       String  @id @default(cuid())
+  userId                   String
+  user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type                     String
+  provider                 String
+  providerAccountId        String
+  refresh_token            String? @db.Text
+  access_token             String? @db.Text
+  expires_at               Int?
+  token_type               String?
+  scope                    String?
+  id_token                 String? @db.Text
+  session_state            String?
+  refresh_token_expires_in Int?
+  oauth_token_secret       String?
+  oauth_token              String?
 
   @@unique([provider, providerAccountId])
   @@map("accounts")
@@ -118,6 +121,7 @@ model Group {
   snapshots    Snapshot[]
   chatMessages ChatMessage[]
   inviteLinks  InviteLink[]
+  joinRequests JoinRequest[]
 
   @@map("groups")
 }
@@ -150,6 +154,21 @@ model InviteLink {
   @@map("invite_links")
 }
 
+model JoinRequest {
+  id        String   @id @default(uuid())
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId   String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  message   String?  @db.Text
+  status    String   @default("pending") // pending, approved, rejected
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([groupId, userId], name: "unique_join_request")
+  @@map("join_requests")
+}
+
 model Post {
   id                    String    @id @default(uuid())
   group                 Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
@@ -164,7 +183,7 @@ model Post {
   highlightEndSeconds   Int?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
-  deletedAt             DateTime?
+  deleted               Boolean   @default(false)
 
   comments     ChatMessage[]      @relation("postComments")
   playlistItem GroupPlaylistItem? @relation("postPlaylistItem")
@@ -182,10 +201,13 @@ model ChatMessage {
   text       String?   @db.Text
   post       Post?     @relation("postComments", fields: [postId], references: [id], onDelete: Cascade)
   postId     String?
+  replyTo    ChatMessage? @relation("messageReplies", fields: [replyToId], references: [id], onDelete: Cascade)
+  replyToId  String?
   spotifyUri String?
   youtubeId  String?
   createdAt  DateTime  @default(now())
   editedAt   DateTime?
+  replies    ChatMessage[] @relation("messageReplies")
 
   @@index([groupId, createdAt], name: "idx_chat_group_created")
   @@map("chat_messages")
@@ -214,8 +236,12 @@ model GroupPlaylistItem {
   spotifyUri String?
   youtubeId  String?
   title      String?
+  artist     String?
+  album      String?
+  durationSec Int?
+  coverUrl   String?
   note       String?  @db.Text
-  position   Int?
+  position   String?  @db.VarChar(255)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -224,6 +250,19 @@ model GroupPlaylistItem {
 
   @@index([groupId, position], name: "idx_playlist_group_position")
   @@map("group_playlist_items")
+}
+
+model GroupPlaylistUserLinkedPlaylists {
+  id               String   @id @default(uuid())
+  groupId          String
+  userId           String
+  provider         String
+  externalPlaylistId String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([groupId, userId, provider], name: "unique_group_user_provider_playlist")
+  @@map("group_playlist_user_linked_playlists")
 }
 
 model Snapshot {
@@ -284,4 +323,16 @@ model PlayEvent {
 
   @@index([groupId, createdAt], name: "idx_playevents_group_created")
   @@map("play_events")
+}
+
+model LastReadMessage {
+  id        String   @id @default(uuid())
+  groupId   String
+  userId    String
+  messageId String
+  createdAt DateTime @default(now())
+  type      String  @default("message")
+
+  @@unique([groupId, userId, type], name: "unique_last_read_type")
+  @@map("last_read_messages")
 }
