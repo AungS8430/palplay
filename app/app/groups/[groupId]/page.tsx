@@ -19,7 +19,7 @@ export default async function GroupPage({ params }: { params: Promise<{ groupId:
   const userId = (session as any).userId as string;
 
   return (
-    <div className="p-4 h-[calc(100dvh-97px)] flex flex-col-reverse">
+    <div className="p-4 h-[calc(100dvh-117px)] flex flex-col-reverse">
       <ChatProvider>
         <div className="self-end w-full pt-4">
           <MessageField groupId={groupId} />
