@@ -30,9 +30,11 @@ export default function GroupTabs({ groupId }: { groupId: string }) {
               <Users className="h-4 w-4" />
             </Button>
           </Link>
-          <Button variant="ghost" size="icon" className="hover:bg-neutral-800/50 text-neutral-400 hover:text-neutral-200">
-            <Settings className="h-4 w-4" />
-          </Button>
+          <Link href={`/app/groups/${groupId}/settings`}>
+            <Button variant="ghost" size="icon" className={`hover:bg-neutral-800/50 ${isActive(`/app/groups/${groupId}/settings`) ? 'text-neutral-200 bg-neutral-800/50' : 'text-neutral-400 hover:text-neutral-200'}`}>
+              <Settings className="h-4 w-4" />
+            </Button>
+          </Link>
         </div>
       </div>
 

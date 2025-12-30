@@ -90,6 +90,16 @@ export type InviteLink = {
   valid: boolean;
 };
 
+export type JoinRequest = {
+  id: string;
+  groupId: string;
+  userId: string;
+  message: string | null;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 export type Post = {
   id: string;
   groupId: string;

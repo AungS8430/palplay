@@ -376,6 +376,81 @@ export function useRealtimeGroupMembers(groupId: string) {
   return { members, connected };
 }
 
+export function useRealtimeJoinRequests(groupId: string) {
+  const [requests, setRequests] = useState<any[]>([]);
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    if (!groupId) return;
+
+    let channel: any = null;
+
+    const setupRealtime = async () => {
+      try {
+        const supabaseClient = await getAuthenticatedSupabaseClient();
+
+        const { data, error } = await supabaseClient
+          .from("join_requests")
+          .select("*, user:users(*)")
+          .eq("groupId", groupId)
+          .eq("status", "pending");
+
+        if (error) {
+          console.error("Error fetching join requests:", error);
+        } else {
+          setRequests(data || []);
+        }
+
+        const channelName = await buildChannelName("join_requests", groupId);
+
+        channel = supabaseClient
+          .channel(channelName)
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "join_requests",
+              filter: `groupId=eq.${groupId}`
+            },
+            async () => {
+              // Refetch all pending requests to get user data
+              const { data: refreshedRequests } = await supabaseClient
+                .from("join_requests")
+                .select("*, user:users(*)")
+                .eq("groupId", groupId)
+                .eq("status", "pending");
+
+              if (refreshedRequests) {
+                setRequests(refreshedRequests);
+              }
+            }
+          )
+          .subscribe((status: string, err: any) => {
+            if (err) {
+              console.error("Join requests realtime subscription error:", err);
+            }
+            setConnected(status === "SUBSCRIBED");
+          });
+      } catch (error) {
+        console.error("Failed to setup join requests realtime:", error);
+        setConnected(false);
+      }
+    };
+
+    setupRealtime();
+
+    return () => {
+      if (channel) {
+        channel.unsubscribe();
+      }
+      setConnected(false);
+    };
+  }, [groupId]);
+
+  return { requests, connected };
+}
+
 export function useRealtimeGroupPlaylist(groupId: string) {
   const [playlistItems, setPlaylistItems] = useState<any[]>([]);
   const [connected, setConnected] = useState(false);

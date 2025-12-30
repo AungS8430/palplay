@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRealtimeGroupMembers } from "@/lib/realtime";
+import { useRealtimeGroupMembers, useRealtimeJoinRequests, useRealtimeGroupInfo } from "@/lib/realtime";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { MoreVertical, Shield, ShieldCheck, Crown, UserMinus, ArrowRightLeft, Loader2 } from "lucide-react";
+import { MoreVertical, Shield, ShieldCheck, Crown, UserMinus, ArrowRightLeft, Loader2, Check, X, UserPlus, Globe, Lock } from "lucide-react";
 
 type MemberWithUser = {
   id: string;
@@ -35,13 +35,30 @@ type MemberWithUser = {
   };
 };
 
+type JoinRequestWithUser = {
+  id: string;
+  groupId: string;
+  userId: string;
+  message: string | null;
+  status: string;
+  createdAt: string;
+  user: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    image: string | null;
+  };
+};
+
 interface MembersClientProps {
   groupId: string;
   currentUserId: string;
 }
 
 export default function MembersClient({ groupId, currentUserId }: MembersClientProps) {
-  const { members, connected } = useRealtimeGroupMembers(groupId);
+  const { members, connected: membersConnected } = useRealtimeGroupMembers(groupId);
+  const { requests, connected: requestsConnected } = useRealtimeJoinRequests(groupId);
+  const { groupInfo, connected: groupConnected } = useRealtimeGroupInfo(groupId);
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
@@ -49,6 +66,8 @@ export default function MembersClient({ groupId, currentUserId }: MembersClientP
     member: MemberWithUser | null;
     newRole?: string;
   }>({ open: false, type: "remove", member: null });
+
+  const connected = membersConnected && requestsConnected && groupConnected;
 
   const currentMember = members.find((m) => m.userId === currentUserId);
   const isOwner = currentMember?.role === "owner";
@@ -147,6 +166,44 @@ export default function MembersClient({ groupId, currentUserId }: MembersClientP
     setConfirmDialog({ open: true, type, member, newRole });
   };
 
+  const handleApproveRequest = async (requestId: string) => {
+    setIsLoading(requestId);
+    try {
+      const response = await fetch(`/api/v1/groups/${groupId}/requests/${requestId}`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        alert(data.error || "Failed to approve request");
+      }
+    } catch (error) {
+      console.error("Error approving request:", error);
+      alert("Failed to approve request");
+    } finally {
+      setIsLoading(null);
+    }
+  };
+
+  const handleRejectRequest = async (requestId: string) => {
+    setIsLoading(requestId);
+    try {
+      const response = await fetch(`/api/v1/groups/${groupId}/requests/${requestId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        alert(data.error || "Failed to reject request");
+      }
+    } catch (error) {
+      console.error("Error rejecting request:", error);
+      alert("Failed to reject request");
+    } finally {
+      setIsLoading(null);
+    }
+  };
+
   const sortedMembers = [...members].sort((a, b) => {
     const roleOrder: Record<string, number> = { owner: 0, admin: 1, member: 2 };
     return (roleOrder[a.role] ?? 3) - (roleOrder[b.role] ?? 3);
@@ -163,9 +220,88 @@ export default function MembersClient({ groupId, currentUserId }: MembersClientP
   return (
     <div className="p-4 max-w-2xl mx-auto">
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-neutral-100">Members</h2>
-        <p className="text-sm text-neutral-400">{members.length} member{members.length !== 1 ? "s" : ""}</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-neutral-100">Members</h2>
+            <p className="text-sm text-neutral-400">{members.length} member{members.length !== 1 ? "s" : ""}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {groupInfo?.isPublic ? (
+              <span className="flex items-center gap-1.5 text-xs bg-green-500/20 text-green-400 px-2.5 py-1 rounded-full">
+                <Globe className="h-3 w-3" />
+                Public Group
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-xs bg-neutral-700/50 text-neutral-400 px-2.5 py-1 rounded-full">
+                <Lock className="h-3 w-3" />
+                Private Group
+              </span>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Join Requests Section - Only visible to admins/owners for public groups */}
+      {canManage && groupInfo?.isPublic && requests.length > 0 && (
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <UserPlus className="h-4 w-4 text-amber-400" />
+            <h3 className="font-medium text-neutral-100">Join Requests</h3>
+            <span className="text-xs bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full">
+              {requests.length}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {requests.map((request: JoinRequestWithUser) => (
+              <div
+                key={request.id}
+                className="flex items-center justify-between p-3 bg-amber-950/20 rounded-lg border border-amber-900/30"
+              >
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={request.user?.image || undefined} alt={request.user?.name || "User"} />
+                    <AvatarFallback className="bg-neutral-700 text-neutral-300">
+                      {request.user?.name?.charAt(0)?.toUpperCase() || "?"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <span className="font-medium text-neutral-100">
+                      {request.user?.name || "Unknown User"}
+                    </span>
+                    {request.message && (
+                      <p className="text-sm text-neutral-400 mt-0.5">"{request.message}"</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-green-400 hover:text-green-300 hover:bg-green-500/20"
+                    onClick={() => handleApproveRequest(request.id)}
+                    disabled={isLoading === request.id}
+                  >
+                    {isLoading === request.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Check className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-500/20"
+                    onClick={() => handleRejectRequest(request.id)}
+                    disabled={isLoading === request.id}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="space-y-2">
         {sortedMembers.map((member) => (
@@ -325,4 +461,3 @@ export default function MembersClient({ groupId, currentUserId }: MembersClientP
     </div>
   );
 }
-

@@ -28,6 +28,7 @@ model User {
   snapshots      Snapshot[]          @relation("creatorSnapshots")
   reactions      Reaction[]
   InviteLink     InviteLink[]
+  joinRequests   JoinRequest[]
 
   @@map("users")
 }
@@ -120,6 +121,7 @@ model Group {
   snapshots    Snapshot[]
   chatMessages ChatMessage[]
   inviteLinks  InviteLink[]
+  joinRequests JoinRequest[]
 
   @@map("groups")
 }
@@ -150,6 +152,21 @@ model InviteLink {
   valid       Boolean   @default(true)
 
   @@map("invite_links")
+}
+
+model JoinRequest {
+  id        String   @id @default(uuid())
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId   String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  message   String?  @db.Text
+  status    String   @default("pending") // pending, approved, rejected
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([groupId, userId], name: "unique_join_request")
+  @@map("join_requests")
 }
 
 model Post {
