@@ -78,7 +78,8 @@ export const authOptions: NextAuthOptions = {
           scope:
             "user-read-private user-read-email " +
             "playlist-modify-public playlist-modify-private " +
-            "user-library-read user-library-modify",
+            "user-library-read user-library-modify " +
+            "user-top-read user-read-recently-played",
           show_dialog: true,
         },
       },
