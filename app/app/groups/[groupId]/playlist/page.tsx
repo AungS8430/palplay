@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useState, useCallback } from "react";
 import { useRealtimeGroupPlaylist } from "@/lib/realtime";
 import PlaylistHeader from "@/components/app/playlist/header";
 import Link from "next/link";
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import SpotifyIcon from "@/components/icons/spotify";
 import YoutubeIcon from "@/components/icons/youtube";
-import { EllipsisVertical, Search, Plus, Trash } from 'lucide-react';
+import { EllipsisVertical, Search, Plus, Trash, RefreshCw, ExternalLink } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,6 +40,65 @@ export default function GroupPlaylistItem({ params }: { params: Promise<{ groupI
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Array<any>>([]);
   const { playlistItems, connected } = useRealtimeGroupPlaylist(groupId);
+
+  // Spotify sync state
+  const [linkedPlaylist, setLinkedPlaylist] = useState<{
+    id: string;
+    externalPlaylistId: string;
+    provider: string;
+  } | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  // Fetch linked playlist on mount
+  useEffect(() => {
+    const fetchLinkedPlaylist = async () => {
+      try {
+        const response = await fetch(`/api/v1/groups/${groupId}/linkedplaylists`);
+        if (response.ok) {
+          const data = await response.json();
+          const spotifyPlaylist = data.playlists?.find(
+            (p: any) => p.provider === "spotify"
+          );
+          setLinkedPlaylist(spotifyPlaylist || null);
+        }
+      } catch (error) {
+        console.error("Error fetching linked playlists:", error);
+      }
+    };
+
+    fetchLinkedPlaylist();
+  }, [groupId]);
+
+  // Handle Spotify sync
+  const handleSpotifySync = useCallback(async () => {
+    setIsSyncing(true);
+    setSyncError(null);
+
+    try {
+      const response = await fetch(`/api/v1/groups/${groupId}/linkedplaylists/sync`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setLinkedPlaylist(data.linkedPlaylist);
+        // Open the Spotify playlist in a new tab
+        window.open(data.playlistUrl, "_blank");
+      } else {
+        const errorData = await response.json();
+        setSyncError(errorData.error || "Failed to sync with Spotify");
+      }
+    } catch (error) {
+      console.error("Error syncing with Spotify:", error);
+      setSyncError("Failed to sync with Spotify");
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [groupId]);
 
   useEffect(() => {
     if (searchQuery.length === 0) {
@@ -98,7 +157,53 @@ export default function GroupPlaylistItem({ params }: { params: Promise<{ groupI
           )
         }
         <div className="mt-4 flex flex-row gap-2">
-          <Button className="text-neutral-200" variant="outline"><SpotifyIcon />Add to Spotify</Button>
+          {linkedPlaylist ? (
+            <ButtonGroup>
+              <Button
+                className="text-neutral-200"
+                variant="outline"
+                onClick={handleSpotifySync}
+                disabled={isSyncing}
+              >
+                {isSyncing ? (
+                  <RefreshCw className="animate-spin" />
+                ) : (
+                  <SpotifyIcon />
+                )}
+                Sync with Spotify
+              </Button>
+              <Button
+                variant="secondary"
+                size="icon"
+                asChild
+              >
+                <Link
+                  href={`https://open.spotify.com/playlist/${linkedPlaylist.externalPlaylistId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </Link>
+              </Button>
+            </ButtonGroup>
+          ) : (
+            <Button
+              className="text-neutral-200"
+              variant="outline"
+              onClick={handleSpotifySync}
+              disabled={isSyncing}
+            >
+              {isSyncing ? (
+                <RefreshCw className="animate-spin" />
+              ) : (
+                <SpotifyIcon />
+              )}
+              Add to Spotify
+            </Button>
+          )}
+          {syncError && (
+            <span className="text-sm text-red-500 self-center">{syncError}</span>
+          )}
           <ButtonGroup className="grow">
             <Input placeholder="Search the playlist..." />
             <Button size="icon" variant="outline"><Search /></Button>
