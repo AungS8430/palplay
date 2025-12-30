@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useRealtimeGroupInfo } from "@/lib/realtime";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Settings, MessageCircle, ListMusic, BarChart3 } from "lucide-react";
+import { Settings, MessageCircle, ListMusic, BarChart3, Users } from "lucide-react";
 
 export default function GroupTabs({ groupId }: { groupId: string }) {
   const { groupInfo, connected } = useRealtimeGroupInfo(groupId);
@@ -24,9 +24,16 @@ export default function GroupTabs({ groupId }: { groupId: string }) {
       <div className="flex justify-between items-center px-1">
         <div className="w-10"></div>
         <h1 className="text-center font-semibold text-neutral-100 text-lg tracking-tight">{groupInfo.name}</h1>
-        <Button variant="ghost" size="icon" className="hover:bg-neutral-800/50 text-neutral-400 hover:text-neutral-200">
-          <Settings className="h-4 w-4" />
-        </Button>
+        <div>
+          <Link href={`/app/groups/${groupId}/members`}>
+            <Button variant="ghost" size="icon" className={`hover:bg-neutral-800/50 ${isActive(`/app/groups/${groupId}/members`) ? 'text-neutral-200 bg-neutral-800/50' : 'text-neutral-400 hover:text-neutral-200'}`}>
+              <Users className="h-4 w-4" />
+            </Button>
+          </Link>
+          <Button variant="ghost" size="icon" className="hover:bg-neutral-800/50 text-neutral-400 hover:text-neutral-200">
+            <Settings className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-row gap-1 bg-neutral-900/50 p-1 rounded-lg">
