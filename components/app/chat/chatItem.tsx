@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, useMemo, useCallback, useRef } from "react";
+import dynamic from "next/dynamic";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Reply, EllipsisVertical, Trash } from "lucide-react";
-import SpotifyEmbed from "@/components/app/embeds/spotify";
-import YouTubeEmbed from "@/components/app/embeds/youtube";
 import ClientDateTime from "@/components/clientDateTime";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +16,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ChatContext } from "@/components/app/chat/chatContext";
+
+// Cache for reply previews to avoid re-fetching
+const replyPreviewCache = new Map<string, string>();
+
+// Lazy load heavy embed components
+const SpotifyEmbed = dynamic(() => import("@/components/app/embeds/spotify"), {
+  loading: () => <div className="w-full h-20 bg-neutral-800 animate-pulse rounded-lg" />,
+  ssr: false,
+});
+
+const YouTubeEmbed = dynamic(() => import("@/components/app/embeds/youtube"), {
+  loading: () => <div className="w-full aspect-video bg-neutral-800 animate-pulse rounded-lg" />,
+  ssr: false,
+});
 
 interface MemberData {
   member: any;
@@ -54,18 +67,60 @@ export default function ChatItem({
   const [activeTab, setActiveTab] = useState(spotifyUri ? "spotify" : "youtube");
   const { replyingTo, setReplyingTo } = context || {};
 
+  // Memoize avatar initials calculation
+  const avatarInitials = useMemo(() => {
+    if (!memberDataProp?.user?.name) return '';
+    const parts = memberDataProp.user.name.split(/[^A-Za-z]/);
+    const first = parts[0]?.[0] || '';
+    const second = parts.length > 1 ? parts[1]?.[0] || '' : '';
+    return first + second;
+  }, [memberDataProp?.user?.name]);
+
+  // Memoize reply handler
+  const handleReply = useCallback(() => {
+    setReplyingTo && setReplyingTo({
+      messageId: messageId || null,
+      messageText: text,
+      memberData: memberDataProp,
+      spotifyUri: spotifyUri || null,
+      youtubeId: youtubeId || null,
+      out: out,
+    });
+  }, [setReplyingTo, messageId, text, memberDataProp, spotifyUri, youtubeId, out]);
+
   useEffect(() => {
-    if (replyToId) {
-      fetch(`/api/v1/groups/${groupId}/messages/${replyToId}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      })
-        .then(res => res.json())
-        .then(data => setReplyPreview(data.text))
-        .catch(error => console.error("Error fetching replied message:", error));
+    if (!replyToId) return;
+
+    // Check cache first
+    const cached = replyPreviewCache.get(replyToId);
+    if (cached) {
+      setReplyPreview(cached);
+      return;
     }
+
+    const controller = new AbortController();
+
+    fetch(`/api/v1/groups/${groupId}/messages/${replyToId}`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      signal: controller.signal,
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.text) {
+          replyPreviewCache.set(replyToId, data.text);
+          setReplyPreview(data.text);
+        }
+      })
+      .catch(error => {
+        if (error.name !== 'AbortError') {
+          console.error("Error fetching replied message:", error);
+        }
+      });
+
+    return () => controller.abort();
   }, [replyToId, groupId]);
 
   if (!memberDataProp) {
@@ -77,8 +132,8 @@ export default function ChatItem({
       {
         !out && (
           <Avatar className="w-9 h-9 order-first">
-            <AvatarImage src={memberDataProp.user.name} />
-            <AvatarFallback>{memberDataProp.user.name.split(/[^A-Za-z]/)[0][0]}{(memberDataProp.user.name.split(/[^A-Za-z]/)?.length && memberDataProp.user.name.split(/[^A-Za-z]/)?.length || 0 > 1) && memberDataProp.user.name.split(/[^A-Za-z]/)[1][0]}</AvatarFallback>
+            <AvatarImage src={memberDataProp.user.image} />
+            <AvatarFallback>{avatarInitials}</AvatarFallback>
           </Avatar>
         )
       }
@@ -136,16 +191,7 @@ export default function ChatItem({
           size="icon-sm"
           variant="ghost"
           className="rounded-full"
-          onClick={() => {
-            setReplyingTo && setReplyingTo({
-              messageId: messageId || null,
-              messageText: text,
-              memberData: memberDataProp,
-              spotifyUri: spotifyUri || null,
-              youtubeId: youtubeId || null,
-              out: out,
-            })
-          }}
+          onClick={handleReply}
         >
           <Reply className="text-neutral-400" />
         </Button>

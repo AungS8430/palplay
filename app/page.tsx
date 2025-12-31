@@ -10,6 +10,8 @@ import {
 import { Music, Users, FileChartPie, Sparkles } from "lucide-react"
 import { redirect } from "next/navigation";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import Image from "next/image";
+import bannerImage from "@/public/banner.png";
 
 export default async function Root() {
   const session = await getServerSession(authOptions);
@@ -44,7 +46,16 @@ export default async function Root() {
             </Card>
           </div>
           {/* Hero Section */}
-          <div className="relative bg-[url('@/public/banner.png')] bg-cover bg-center h-[550px] md:h-[600px] flex items-center justify-center rounded-2xl mt-6 overflow-hidden">
+          <div className="relative h-[550px] md:h-[600px] flex items-center justify-center rounded-2xl mt-6 overflow-hidden">
+            <Image
+              src={bannerImage}
+              alt="PalPlay banner"
+              fill
+              priority
+              placeholder="blur"
+              className="object-cover object-center"
+              sizes="(max-width: 1152px) 100vw, 1152px"
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
             <div className="absolute inset-0 bg-gradient-to-r from-purple-900/20 to-blue-900/20" />
             <div className="relative w-full h-full flex flex-col items-center justify-center gap-8 px-6 text-center">

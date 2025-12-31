@@ -16,35 +16,45 @@ export async function GET(request: Request, { params }: { params: Promise<{ grou
   const requesterId = (session as any).userId as string;
 
   try {
-    const requesterMembership = await prisma.groupMember.findFirst({
-      where: {
-        groupId: groupId,
-        userId: requesterId,
-      },
-    });
+    // Combine both membership checks and user data fetch into fewer queries
+    const [requesterMembership, membershipWithUser] = await Promise.all([
+      prisma.groupMember.findFirst({
+        where: {
+          groupId: groupId,
+          userId: requesterId,
+        },
+        select: { id: true }, // Only select what we need
+      }),
+      prisma.groupMember.findFirst({
+        where: {
+          groupId: groupId,
+          userId: userId,
+        },
+        include: {
+          user: true, // Include user data in the same query
+        },
+      }),
+    ]);
 
     if (!requesterMembership) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const membership = await prisma.groupMember.findFirst({
-      where: {
-        groupId: groupId,
-        userId: userId,
-      },
-    });
-
-    if (!membership) {
+    if (!membershipWithUser) {
       return NextResponse.json({ error: 'Member not found' }, { status: 404 });
     }
 
-    const user = await prisma.user.findUnique({
-      where: {
-        id: membership.userId,
-      },
-    });
+    const { user, ...member } = membershipWithUser;
 
-    return NextResponse.json({ member: membership, user: user });
+    // Add cache headers for member data (cache for 60 seconds, stale-while-revalidate for 5 min)
+    return NextResponse.json(
+      { member, user },
+      {
+        headers: {
+          'Cache-Control': 'private, max-age=60, stale-while-revalidate=300',
+        },
+      }
+    );
   } catch (e) {
     return NextResponse.json({ error: 'Failed to fetch member' }, { status: 500 });
   }

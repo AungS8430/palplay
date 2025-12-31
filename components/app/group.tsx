@@ -23,23 +23,19 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   Field,
-  FieldContent,
   FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
-  FieldLegend,
-  FieldSeparator,
   FieldSet,
-  FieldTitle,
 } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Trash, LogOut, EllipsisVertical } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback, memo } from "react";
 import Link from "next/link";
 
-export default function Group({ groupId, role, isActive }: { groupId: string, role: string, isActive?: boolean }) {
+function Group({ groupId, role, isActive }: { groupId: string, role: string, isActive?: boolean }) {
   const { groupInfo, connected } = useRealtimeGroupInfo(groupId);
   const [confirmation, setConfirmation] = useState("");
   const [confirmationError, setConfirmationError] = useState(false);
@@ -49,13 +45,22 @@ export default function Group({ groupId, role, isActive }: { groupId: string, ro
 
   const [error, setError] = useState(null);
 
-  function handleDeleteGroup(e: React.FormEvent) {
+  // Memoize avatar initials calculation
+  const avatarInitials = useMemo(() => {
+    if (!groupInfo?.name) return '';
+    const parts = groupInfo.name.split(/[^A-Za-z]/);
+    const first = parts[0]?.[0] || '';
+    const second = parts.length > 1 ? parts[1]?.[0] || '' : '';
+    return first + second;
+  }, [groupInfo?.name]);
+
+  const handleDeleteGroup = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     if (role !== "owner") return;
     if (confirmation !== groupInfo?.name) {
       return;
     }
-    const response = fetch(`/api/v1/groups/${groupId}`, {
+    fetch(`/api/v1/groups/${groupId}`, {
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",
@@ -64,15 +69,16 @@ export default function Group({ groupId, role, isActive }: { groupId: string, ro
       if (res.ok) {
         setDialogOpen(false);
       } else {
-        setError(res.body && (await res.json()).error ? (await res.json()).error : "Failed to delete group");
+        const data = await res.json();
+        setError(data.error || "Failed to delete group");
         setErrorDialogOpen(true);
       }
     })
-  }
+  }, [role, confirmation, groupInfo?.name, groupId]);
 
-  function handleLeaveGroup() {
+  const handleLeaveGroup = useCallback(() => {
     if (role === "owner") return;
-    const response = fetch(`api/v1/groups/${groupId}/members`, {
+    fetch(`/api/v1/groups/${groupId}/members`, {
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",
@@ -81,11 +87,12 @@ export default function Group({ groupId, role, isActive }: { groupId: string, ro
       if (res.ok) {
         setDialogOpen(false);
       } else {
-        setError(res.body && (await res.json()).error ? (await res.json()).error : "Failed to leave group");
+        const data = await res.json();
+        setError(data.error || "Failed to leave group");
         setErrorDialogOpen(true);
       }
     })
-  }
+  }, [role, groupId]);
 
   useEffect(() => {
     setConfirmationError(confirmation !== "" && confirmation !== groupInfo?.name);
@@ -107,7 +114,7 @@ export default function Group({ groupId, role, isActive }: { groupId: string, ro
             <Link href={`/app/groups/${groupId}`}>
               <Avatar>
                 <AvatarImage src={undefined} alt={groupId} />
-                <AvatarFallback>{groupInfo?.name?.split(/[^A-Za-z]/)[0][0]}{(groupInfo?.name?.split(/[^A-Za-z]/)?.length && groupInfo?.name?.split(/[^A-Za-z]/)?.length > 1) && groupInfo?.name?.split(/[^A-Za-z]/)[1][0]}</AvatarFallback>
+                <AvatarFallback>{avatarInitials}</AvatarFallback>
               </Avatar>
               <p className="truncate font-medium text-neutral-300">{groupInfo?.name ?? "User"}</p>
             </Link>
@@ -207,3 +214,7 @@ export default function Group({ groupId, role, isActive }: { groupId: string, ro
     )
   )
 }
+
+// Export as memoized component to prevent unnecessary re-renders
+export default memo(Group);
+

@@ -1,79 +1,56 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useId } from "react";
 import { useSession } from "next-auth/react";
 import { getAuthenticatedSupabaseClient } from "@/lib/supabase";
 import { GroupMember, Group } from "@/lib/types";
 
-async function buildChannelName(base: string, identifier: string) {
-  const supabaseClient = await getAuthenticatedSupabaseClient();
+// Generate a unique ID for channel names to avoid conflicts between multiple hook instances
+function useChannelId(prefix: string, identifier: string) {
+  const instanceId = useId();
+  const channelIdRef = useRef<string | null>(null);
 
-  // Check auth status
-  const { data: { session: supabaseSession }, error: sessionError } = await supabaseClient.auth.getSession();
-
-  const maxAttempts = 5;
-  let currentId = identifier;
-
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    // always generate a short identifier before checking
-    const short = (typeof crypto !== "undefined" && (crypto as any).randomUUID)
-      ? (crypto as any).randomUUID().slice(0, 8)
-      : Math.random().toString(36).slice(2, 10);
-    currentId = `${identifier}-${short}`;
-
-    const channels = await supabaseClient.getChannels();
-    const channelName = `${base}:${currentId}`;
-    const channelExists = channels?.channels?.some((ch: any) => ch.name === channelName);
-
-    if (!channelExists) {
-      return channelName;
-    }
+  if (!channelIdRef.current) {
+    // Create a stable unique channel name using instance ID
+    const sanitizedInstanceId = instanceId.replace(/:/g, '_');
+    channelIdRef.current = `${prefix}:${identifier}:${sanitizedInstanceId}`;
   }
 
-  // final fallback using a UUID or random string
-  const finalId = (typeof crypto !== "undefined" && (crypto as any).randomUUID)
-    ? (crypto as any).randomUUID()
-    : Math.random().toString(36).slice(2) + Date.now().toString(36);
-
-  return `${base}:${identifier}-${finalId}`;
+  return channelIdRef.current;
 }
 
 export function useRealtimeGroupList() {
   const session = useSession();
   const [groups, setGroups] = useState<GroupMember[]>([]);
   const [connected, setConnected] = useState(false);
+  const userId = session.data?.user?.id;
+  const channelName = useChannelId("group_members_user", userId || "none");
 
   useEffect(() => {
-    const userId = session.data?.user?.id;
-
     if (!userId) {
       setGroups([]);
       return;
     }
 
     let channel: any = null;
+    let isMounted = true;
 
     const setupRealtime = async () => {
       try {
         const supabaseClient = await getAuthenticatedSupabaseClient();
 
-        // Check auth status
-        const { data: { session: supabaseSession }, error: sessionError } = await supabaseClient.auth.getSession();
-
         const { data, error } = await supabaseClient
           .from("group_members")
-          .select("*")
+          .select("id, groupId, userId, role, joinedAt")
           .eq("userId", userId);
+
+        if (!isMounted) return;
 
         if (error) {
           console.error("Error fetching groups:", error.message || error);
         } else {
           setGroups(data || []);
         }
-
-        const channelName = await buildChannelName("group_members", userId);
-
-        console.log(channelName)
 
         channel = supabaseClient
           .channel(channelName, {
@@ -91,11 +68,13 @@ export function useRealtimeGroupList() {
               filter: `userId=eq.${userId}`
             },
             async (payload: any) => {
-              console.log("=== Realtime Event Received ===");
-              console.log("Event type:", payload.eventType);
+              if (!isMounted) return;
 
               if (payload.eventType === "INSERT" && payload.new) {
-                setGroups(prev => [...prev, payload.new as GroupMember]);
+                setGroups(prev => {
+                  if (prev.some(g => g.id === payload.new.id)) return prev;
+                  return [...prev, payload.new as GroupMember];
+                });
               } else if (payload.eventType === "DELETE" && payload.old) {
                 setGroups(prev => prev.filter(g => g.id !== payload.old.id));
               } else if (payload.eventType === "UPDATE" && payload.new) {
@@ -104,6 +83,7 @@ export function useRealtimeGroupList() {
             }
           )
           .subscribe((status: string, err: any) => {
+            if (!isMounted) return;
             if (err) {
               console.error("Realtime subscription error:", err);
             }
@@ -111,19 +91,20 @@ export function useRealtimeGroupList() {
           });
       } catch (error) {
         console.error("Failed to setup realtime:", error);
-        setConnected(false);
+        if (isMounted) setConnected(false);
       }
     };
 
     setupRealtime();
 
     return () => {
+      isMounted = false;
       if (channel) {
         channel.unsubscribe();
       }
       setConnected(false);
     };
-  }, [session.data?.user?.id]);
+  }, [userId, channelName]);
 
   return { groups, connected };
 }
@@ -131,24 +112,25 @@ export function useRealtimeGroupList() {
 export function useRealtimeGroupInfo(groupId: string) {
   const [groupInfo, setGroupInfo] = useState<Group | null>(null);
   const [connected, setConnected] = useState(false);
+  const channelName = useChannelId("groups", groupId || "none");
 
   useEffect(() => {
     if (!groupId) return;
 
     let channel: any = null;
+    let isMounted = true;
 
     const setupRealtime = async () => {
       try {
         const supabaseClient = await getAuthenticatedSupabaseClient();
 
-        // Check auth status
-        const { data: { session: supabaseSession }, error: sessionError } = await supabaseClient.auth.getSession();
-
         const { data, error } = await supabaseClient
           .from("groups")
-          .select("*")
+          .select("id, name, description, isPublic, createdAt")
           .eq("id", groupId)
           .single();
+
+        if (!isMounted) return;
 
         if (error) {
           console.error("Error fetching group:", error.message || error);
@@ -156,9 +138,6 @@ export function useRealtimeGroupInfo(groupId: string) {
           setGroupInfo(data);
         }
 
-        const channelName = await buildChannelName("groups", groupId);
-
-        console.log(channelName)
 
         channel = supabaseClient
           .channel(channelName, {
@@ -176,16 +155,15 @@ export function useRealtimeGroupInfo(groupId: string) {
               filter: `id=eq.${groupId}`
             },
             async (payload: any) => {
-              const { data: newData } = await supabaseClient
-                .from("groups")
-                .select("*")
-                .eq("id", groupId)
-                .single();
+              if (!isMounted) return;
 
-              setGroupInfo(newData);
+              if (payload.new) {
+                setGroupInfo(payload.new as Group);
+              }
             }
           )
           .subscribe((status: string, err: any) => {
+            if (!isMounted) return;
             if (err) {
               console.error("Group info realtime subscription error:", err);
             }
@@ -193,19 +171,20 @@ export function useRealtimeGroupInfo(groupId: string) {
           });
       } catch (error) {
         console.error("Failed to setup group info realtime:", error);
-        setConnected(false);
+        if (isMounted) setConnected(false);
       }
     };
 
     setupRealtime();
 
     return () => {
+      isMounted = false;
       if (channel) {
         channel.unsubscribe();
       }
       setConnected(false);
     };
-  }, [groupId]);
+  }, [groupId, channelName]);
 
   return { groupInfo, connected };
 }
@@ -213,38 +192,33 @@ export function useRealtimeGroupInfo(groupId: string) {
 export function useRealtimeChatMessages(groupId: string) {
   const [messages, setMessages] = useState<any[]>([]);
   const [connected, setConnected] = useState(false);
+  const channelName = useChannelId("chat_messages", groupId || "none");
 
   useEffect(() => {
     if (!groupId) return;
 
     let channel: any = null;
+    let isMounted = true;
 
     const setupRealtime = async () => {
       try {
         const supabaseClient = await getAuthenticatedSupabaseClient();
 
-        const { data: { session: supabaseSession }, error: sessionError } = await supabaseClient.auth.getSession();
-
-        console.log("=== Chat Messages Setup ===");
-        console.log("User ID:", supabaseSession?.user?.id);
-        console.log("Group ID:", groupId);
-
         const { data, error } = await supabaseClient
           .from("chat_messages")
-          .select("*")
+          .select("id, groupId, authorId, text, postId, replyToId, spotifyUri, youtubeId, createdAt, editedAt")
           .eq("groupId", groupId)
-          .order("createdAt", { ascending: false });
+          .order("createdAt", { ascending: false })
+          .limit(100); // Limit initial load for better performance
+
+        if (!isMounted) return;
 
         if (error) {
           console.error("Error fetching chat messages:", error);
         } else {
-          console.log("Initial messages count:", data?.length);
           setMessages(data || []);
         }
 
-        // Use simple, consistent channel name without random ID
-        const channelName = buildChannelName("chat_messages", groupId);
-        console.log("Channel name:", channelName);
 
         channel = supabaseClient
           .channel(channelName)
@@ -257,8 +231,7 @@ export function useRealtimeChatMessages(groupId: string) {
               filter: `groupId=eq.${groupId}`
             },
             (payload: any) => {
-              console.log("=== Chat Message Event ===", payload);
-              console.log("Event type:", payload.eventType);
+              if (!isMounted) return;
 
               if (payload.eventType === "INSERT" && payload.new) {
                 setMessages(prev => {
@@ -276,7 +249,7 @@ export function useRealtimeChatMessages(groupId: string) {
             }
           )
           .subscribe((status: string, err: any) => {
-            console.log("Chat subscription status:", status);
+            if (!isMounted) return;
             if (err) {
               console.error("Chat messages realtime subscription error:", err);
             }
@@ -284,19 +257,20 @@ export function useRealtimeChatMessages(groupId: string) {
           });
       } catch (error) {
         console.error("Failed to setup chat messages realtime:", error);
-        setConnected(false);
+        if (isMounted) setConnected(false);
       }
     };
 
     setupRealtime();
 
     return () => {
+      isMounted = false;
       if (channel) {
         channel.unsubscribe();
       }
       setConnected(false);
     };
-  }, [groupId]);
+  }, [groupId, channelName]);
 
   return { messages, connected };
 }
@@ -304,11 +278,13 @@ export function useRealtimeChatMessages(groupId: string) {
 export function useRealtimeGroupMembers(groupId: string) {
   const [members, setMembers] = useState<any[]>([]);
   const [connected, setConnected] = useState(false);
+  const channelName = useChannelId("group_members_group", groupId || "none");
 
   useEffect(() => {
     if (!groupId) return;
 
     let channel: any = null;
+    let isMounted = true;
 
     const setupRealtime = async () => {
       try {
@@ -316,8 +292,10 @@ export function useRealtimeGroupMembers(groupId: string) {
 
         const { data, error } = await supabaseClient
           .from("group_members")
-          .select("*, user:users(*)")
+          .select("id, groupId, userId, role, joinedAt, user:users(id, name, email, image)")
           .eq("groupId", groupId);
+
+        if (!isMounted) return;
 
         if (error) {
           console.error("Error fetching group members:", error);
@@ -325,7 +303,6 @@ export function useRealtimeGroupMembers(groupId: string) {
           setMembers(data || []);
         }
 
-        const channelName = await buildChannelName("group_members", groupId);
 
         channel = supabaseClient
           .channel(channelName)
@@ -338,20 +315,21 @@ export function useRealtimeGroupMembers(groupId: string) {
               filter: `groupId=eq.${groupId}`
             },
             async (payload: any) => {
-              console.log("=== Group Member Event ===", payload);
+              if (!isMounted) return;
 
               // Refetch all members to get user data
               const { data: refreshedMembers } = await supabaseClient
                 .from("group_members")
-                .select("*, user:users(*)")
+                .select("id, groupId, userId, role, joinedAt, user:users(id, name, email, image)")
                 .eq("groupId", groupId);
 
-              if (refreshedMembers) {
+              if (refreshedMembers && isMounted) {
                 setMembers(refreshedMembers);
               }
             }
           )
           .subscribe((status: string, err: any) => {
+            if (!isMounted) return;
             if (err) {
               console.error("Group members realtime subscription error:", err);
             }
@@ -359,19 +337,20 @@ export function useRealtimeGroupMembers(groupId: string) {
           });
       } catch (error) {
         console.error("Failed to setup group members realtime:", error);
-        setConnected(false);
+        if (isMounted) setConnected(false);
       }
     };
 
     setupRealtime();
 
     return () => {
+      isMounted = false;
       if (channel) {
         channel.unsubscribe();
       }
       setConnected(false);
     };
-  }, [groupId]);
+  }, [groupId, channelName]);
 
   return { members, connected };
 }
@@ -379,11 +358,13 @@ export function useRealtimeGroupMembers(groupId: string) {
 export function useRealtimeJoinRequests(groupId: string) {
   const [requests, setRequests] = useState<any[]>([]);
   const [connected, setConnected] = useState(false);
+  const channelName = useChannelId("join_requests", groupId || "none");
 
   useEffect(() => {
     if (!groupId) return;
 
     let channel: any = null;
+    let isMounted = true;
 
     const setupRealtime = async () => {
       try {
@@ -391,9 +372,11 @@ export function useRealtimeJoinRequests(groupId: string) {
 
         const { data, error } = await supabaseClient
           .from("join_requests")
-          .select("*, user:users(*)")
+          .select("id, groupId, userId, message, status, createdAt, user:users(id, name, email, image)")
           .eq("groupId", groupId)
           .eq("status", "pending");
+
+        if (!isMounted) return;
 
         if (error) {
           console.error("Error fetching join requests:", error);
@@ -401,7 +384,6 @@ export function useRealtimeJoinRequests(groupId: string) {
           setRequests(data || []);
         }
 
-        const channelName = await buildChannelName("join_requests", groupId);
 
         channel = supabaseClient
           .channel(channelName)
@@ -414,19 +396,22 @@ export function useRealtimeJoinRequests(groupId: string) {
               filter: `groupId=eq.${groupId}`
             },
             async () => {
+              if (!isMounted) return;
+
               // Refetch all pending requests to get user data
               const { data: refreshedRequests } = await supabaseClient
                 .from("join_requests")
-                .select("*, user:users(*)")
+                .select("id, groupId, userId, message, status, createdAt, user:users(id, name, email, image)")
                 .eq("groupId", groupId)
                 .eq("status", "pending");
 
-              if (refreshedRequests) {
+              if (refreshedRequests && isMounted) {
                 setRequests(refreshedRequests);
               }
             }
           )
           .subscribe((status: string, err: any) => {
+            if (!isMounted) return;
             if (err) {
               console.error("Join requests realtime subscription error:", err);
             }
@@ -434,19 +419,20 @@ export function useRealtimeJoinRequests(groupId: string) {
           });
       } catch (error) {
         console.error("Failed to setup join requests realtime:", error);
-        setConnected(false);
+        if (isMounted) setConnected(false);
       }
     };
 
     setupRealtime();
 
     return () => {
+      isMounted = false;
       if (channel) {
         channel.unsubscribe();
       }
       setConnected(false);
     };
-  }, [groupId]);
+  }, [groupId, channelName]);
 
   return { requests, connected };
 }
@@ -454,11 +440,13 @@ export function useRealtimeJoinRequests(groupId: string) {
 export function useRealtimeGroupPlaylist(groupId: string) {
   const [playlistItems, setPlaylistItems] = useState<any[]>([]);
   const [connected, setConnected] = useState(false);
+  const channelName = useChannelId("group_playlist", groupId || "none");
 
   useEffect(() => {
     if (!groupId) return;
 
     let channel: any = null;
+    let isMounted = true;
 
     const setupRealtime = async () => {
       try {
@@ -466,9 +454,11 @@ export function useRealtimeGroupPlaylist(groupId: string) {
 
         const { data, error } = await supabaseClient
           .from("group_playlist_items")
-          .select("*")
+          .select("id, groupId, addedById, spotifyUri, youtubeId, title, artist, album, durationSec, coverUrl, note, position, createdAt")
           .eq("groupId", groupId)
           .order("position", { ascending: true });
+
+        if (!isMounted) return;
 
         if (error) {
           console.error("Error fetching playlist items:", error);
@@ -476,8 +466,6 @@ export function useRealtimeGroupPlaylist(groupId: string) {
           setPlaylistItems(data || []);
         }
 
-        const channelName = await buildChannelName("group_playlist", groupId);
-        console.log(channelName)
 
         channel = supabaseClient
           .channel(channelName)
@@ -490,7 +478,7 @@ export function useRealtimeGroupPlaylist(groupId: string) {
               filter: `groupId=eq.${groupId}`
             },
             (payload: any) => {
-              console.log("=== Playlist Item INSERT Event ===", payload);
+              if (!isMounted) return;
               if (payload.new) {
                 setPlaylistItems(prev => {
                   // Prevent duplicates
@@ -511,7 +499,7 @@ export function useRealtimeGroupPlaylist(groupId: string) {
               filter: `groupId=eq.${groupId}`
             },
             (payload: any) => {
-              console.log("=== Playlist Item UPDATE Event ===", payload);
+              if (!isMounted) return;
               if (payload.new) {
                 setPlaylistItems(prev => prev.map(item => item.id === payload.new.id ? payload.new : item));
               }
@@ -525,7 +513,7 @@ export function useRealtimeGroupPlaylist(groupId: string) {
               table: "group_playlist_items"
             },
             (payload: any) => {
-              console.log("=== Playlist Item DELETE Event ===", payload);
+              if (!isMounted) return;
               // For DELETE, we filter client-side since payload.old may not include groupId
               if (payload.old && payload.old.id) {
                 setPlaylistItems(prev => prev.filter(item => item.id !== payload.old.id));
@@ -533,6 +521,7 @@ export function useRealtimeGroupPlaylist(groupId: string) {
             }
           )
           .subscribe((status: string, err: any) => {
+            if (!isMounted) return;
             if (err) {
               console.error("Playlist realtime subscription error:", err);
             }
@@ -540,19 +529,20 @@ export function useRealtimeGroupPlaylist(groupId: string) {
           });
       } catch (error) {
         console.error("Failed to setup playlist realtime:", error);
-        setConnected(false);
+        if (isMounted) setConnected(false);
       }
     };
 
     setupRealtime();
 
     return () => {
+      isMounted = false;
       if (channel) {
         channel.unsubscribe();
       }
       setConnected(false);
     };
-  }, [groupId]);
+  }, [groupId, channelName]);
 
   return { playlistItems, connected };
 }

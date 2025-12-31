@@ -16,36 +16,63 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const userId = (session as any).userId as string;
 
   try {
-    const membership = await prisma.groupMember.findFirst({
-      where: {
-        groupId: groupId,
-        userId: userId,
-      },
-    });
+    // Run all queries in parallel for better performance
+    const [membership, message, reactions] = await Promise.all([
+      prisma.groupMember.findFirst({
+        where: {
+          groupId: groupId,
+          userId: userId,
+        },
+        select: { id: true }, // Only select what we need for auth check
+      }),
+      prisma.chatMessage.findFirst({
+        where: {
+          id: messageId,
+          groupId: groupId,
+        },
+        select: {
+          id: true,
+          groupId: true,
+          authorId: true,
+          text: true,
+          postId: true,
+          replyToId: true,
+          spotifyUri: true,
+          youtubeId: true,
+          createdAt: true,
+          editedAt: true,
+        },
+      }),
+      prisma.reaction.findMany({
+        where: {
+          targetType: "message",
+          targetId: messageId,
+        },
+        select: {
+          id: true,
+          userId: true,
+          reaction: true,
+          createdAt: true,
+        },
+      }),
+    ]);
 
     if (!membership) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const message = await prisma.chatMessage.findFirst({
-      where: {
-        id: messageId,
-        groupId: groupId,
-      },
-    });
-
-    const reactions = await prisma.reaction.findMany({
-      where: {
-        targetType: "message",
-        targetId: messageId,
-      }
-    })
-
     if (!message) {
       return NextResponse.json({ error: "Message not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ ...message, reactions });
+    return NextResponse.json(
+      { ...message, reactions },
+      {
+        headers: {
+          'Cache-Control': 'private, max-age=30, stale-while-revalidate=60',
+        },
+      }
+    );
   } catch (e) {
     return NextResponse.json({ error: "Failed to fetch message" }, { status: 500 });
   }
