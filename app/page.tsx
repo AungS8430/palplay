@@ -20,6 +20,29 @@ export default async function Root() {
       <div className="min-h-screen bg-gradient-to-b from-neutral-950 to-neutral-900">
         <Navbar />
         <div className="max-w-6xl mx-auto pt-[61px] pb-16 px-4">
+          {/* Demo Notice Section */}
+          <div className="mt-4">
+            <Card className="bg-amber-500/10 border-amber-500/30">
+              <CardHeader className="text-center space-y-4">
+                <CardTitle className="text-xl md:text-2xl font-bold text-amber-400">
+                  🎵 Demo Account Required
+                </CardTitle>
+                <CardDescription className="text-neutral-300 text-base leading-relaxed max-w-2xl mx-auto">
+                  This demo requires you to sign in with a specific Spotify account. Please use the following credentials:
+                </CardDescription>
+                <div className="bg-neutral-900/70 rounded-lg p-4 max-w-md mx-auto space-y-2">
+                  <p className="text-neutral-200">
+                    <span className="text-neutral-400">Email:</span>{" "}
+                    <code className="bg-neutral-800 px-2 py-1 rounded text-amber-300">catabe6052@dubokutv.com</code>
+                  </p>
+                  <p className="text-neutral-200">
+                    <span className="text-neutral-400">Password:</span>{" "}
+                    <code className="bg-neutral-800 px-2 py-1 rounded text-amber-300">test123456</code>
+                  </p>
+                </div>
+              </CardHeader>
+            </Card>
+          </div>
           {/* Hero Section */}
           <div className="relative bg-[url('@/public/banner.png')] bg-cover bg-center h-[550px] md:h-[600px] flex items-center justify-center rounded-2xl mt-6 overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
