@@ -1,3 +1,5 @@
+## Due to Spotify's updated criteria for Web API Extended Access, which requires the developer to be an organization. Which I am not, this project should be self-hosted and managed for a small group of people. Hosting this as a social-media application would not be possible until Spotify remove the mentioned requirement.
+
 # 🎵 PalPlay
 
 A music-based social platform that lets you share playlists, chat with songs, and discover what your friends are listening to!
