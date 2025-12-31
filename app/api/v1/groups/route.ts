@@ -16,44 +16,60 @@ export async function GET(req: Request) {
   const search = searchParams.get("search") || "";
 
   try {
-    // Get groups user is already a member of
-    const userMemberships = await prisma.groupMember.findMany({
-      where: { userId },
-      select: { groupId: true },
-    });
-    const memberGroupIds = userMemberships.map((m) => m.groupId);
-
-    // Get pending requests
-    const pendingRequests = await prisma.joinRequest.findMany({
-      where: { userId, status: "pending" },
-      select: { groupId: true },
-    });
-    const pendingGroupIds = pendingRequests.map((r) => r.groupId);
-
-    // Fetch public groups the user is NOT a member of
-    const publicGroups = await prisma.group.findMany({
-      where: {
-        isPublic: true,
-        id: { notIn: memberGroupIds },
-        ...(search ? { name: { contains: search, mode: "insensitive" } } : {}),
-      },
-      include: {
-        _count: {
-          select: { members: true },
+    // Run all independent queries in parallel for better performance
+    const [userMemberships, pendingRequests, publicGroups] = await Promise.all([
+      // Get groups user is already a member of
+      prisma.groupMember.findMany({
+        where: { userId },
+        select: { groupId: true },
+      }),
+      // Get pending requests
+      prisma.joinRequest.findMany({
+        where: { userId, status: "pending" },
+        select: { groupId: true },
+      }),
+      // Fetch public groups - we'll filter in memory since we need membership data
+      prisma.group.findMany({
+        where: {
+          isPublic: true,
+          ...(search ? { name: { contains: search, mode: "insensitive" } } : {}),
         },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    });
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          isPublic: true,
+          createdAt: true,
+          _count: {
+            select: { members: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 100, // Fetch more, filter less
+      }),
+    ]);
 
-    // Add pending status to each group
-    const groupsWithStatus = publicGroups.map((group) => ({
-      ...group,
-      memberCount: group._count.members,
-      hasPendingRequest: pendingGroupIds.includes(group.id),
-    }));
+    const memberGroupIds = new Set(userMemberships.map((m) => m.groupId));
+    const pendingGroupIds = new Set(pendingRequests.map((r) => r.groupId));
 
-    return NextResponse.json({ groups: groupsWithStatus });
+    // Filter out groups user is already a member of and add status
+    const groupsWithStatus = publicGroups
+      .filter((group) => !memberGroupIds.has(group.id))
+      .slice(0, 50)
+      .map((group) => ({
+        ...group,
+        memberCount: group._count.members,
+        hasPendingRequest: pendingGroupIds.has(group.id),
+      }));
+
+    return NextResponse.json(
+      { groups: groupsWithStatus },
+      {
+        headers: {
+          'Cache-Control': 'private, max-age=30, stale-while-revalidate=60',
+        },
+      }
+    );
   } catch (e) {
     console.error("Error fetching public groups:", e);
     return NextResponse.json({ error: "Failed to fetch groups" }, { status: 500 });

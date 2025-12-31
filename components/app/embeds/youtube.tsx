@@ -4,6 +4,7 @@ export default function YouTubeEmbed({ videoId }: { videoId: string }) {
       <iframe
         className="w-full h-full rounded-lg"
         src={`https://www.youtube.com/embed/${videoId}`}
+        loading="lazy"
         allowFullScreen
       ></iframe>
     </div>

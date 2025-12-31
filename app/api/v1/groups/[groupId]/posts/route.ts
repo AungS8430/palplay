@@ -72,37 +72,59 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const userId = (session as any).userId as string;
 
   try {
-    const membership = await prisma.groupMember.findFirst({
-      where: {
-        groupId: groupId,
-        userId: userId,
-      },
-    });
+    // Run all queries in parallel for better performance
+    const [membership, posts, count] = await Promise.all([
+      prisma.groupMember.findFirst({
+        where: {
+          groupId: groupId,
+          userId: userId,
+        },
+        select: { id: true }, // Only select what we need for auth check
+      }),
+      prisma.post.findMany({
+        where: {
+          groupId: groupId,
+          deleted: false,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        skip: offset,
+        take: limit,
+        select: {
+          id: true,
+          groupId: true,
+          authorId: true,
+          spotifyUri: true,
+          youtubeId: true,
+          title: true,
+          caption: true,
+          highlightStartSeconds: true,
+          highlightEndSeconds: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+      prisma.post.count({
+        where: {
+          groupId: groupId,
+          deleted: false,
+        },
+      }),
+    ]);
 
     if (!membership) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const posts = await prisma.post.findMany({
-      where: {
-        groupId: groupId,
-        deleted: false,
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-      skip: offset,
-      take: limit,
-    });
-
-    const count = await prisma.post.count({
-      where: {
-        groupId: groupId,
-        deleted: false,
-      },
-    });
-
-    return NextResponse.json({ count, posts });
+    return NextResponse.json(
+      { count, posts },
+      {
+        headers: {
+          'Cache-Control': 'private, max-age=10, stale-while-revalidate=30',
+        },
+      }
+    );
   } catch (e) {
     return NextResponse.json({ error: "Failed to fetch posts" }, { status: 500 });
   }

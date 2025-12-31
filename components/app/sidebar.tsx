@@ -23,13 +23,23 @@ import JoinGroup from "@/components/app/joinGroup";
 import GroupList from "@/components/app/groupList";
 import Link from "next/link";
 import { getServerSession } from "next-auth";
-import Image from "next/image";
 import { CircleUser, Settings } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
+// Helper function to compute avatar initials
+function getAvatarInitials(name: string | null | undefined): string {
+  if (!name) return '';
+  const parts = name.split(/[^A-Za-z]/);
+  const first = parts[0]?.[0] || '';
+  const second = parts.length > 1 ? parts[1]?.[0] || '' : '';
+  return first + second;
+}
+
 export default async function AppSidebar() {
   const session = await getServerSession(authOptions);
+  const avatarInitials = getAvatarInitials(session?.user?.name);
+
   return (
     <Sidebar>
       <SidebarHeader>
@@ -64,7 +74,7 @@ export default async function AppSidebar() {
                 <SidebarMenuButton size="lg" className="bg-secondary text-secondary-foreground hover:bg-secondary/90 hover:text-secondary-foreground active:bg-secondary/90 active:text-secondary-foreground min-w-8 duration-200 ease-linear">
                   <Avatar>
                     <AvatarImage src={session?.user?.image ?? undefined} alt={session?.user?.name ?? "User"} />
-                    <AvatarFallback>{session?.user?.name?.split(/[^A-Za-z]/)[0][0]}{(session?.user?.name?.split(/[^A-Za-z]/)?.length && session?.user?.name?.split(/[^A-Za-z]/)?.length > 1) && session?.user?.name?.split(/[^A-Za-z]/)[1][0]}</AvatarFallback>
+                    <AvatarFallback>{avatarInitials}</AvatarFallback>
                   </Avatar>
                   <div className="flex flex-col">
                     <p className="truncate font-medium text-neutral-300">{session?.user?.name ?? "User"}</p>
@@ -77,7 +87,7 @@ export default async function AppSidebar() {
                   <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                     <Avatar>
                       <AvatarImage src={session?.user?.image ?? undefined} alt={session?.user?.name ?? "User"} />
-                      <AvatarFallback>{session?.user?.name?.split(/[^A-Za-z]/)[0][0]}{(session?.user?.name?.split(/[^A-Za-z]/)?.length && session?.user?.name?.split(/[^A-Za-z]/)?.length || 0 > 1) && session?.user?.name?.split(/[^A-Za-z]/)[1][0]}</AvatarFallback>
+                      <AvatarFallback>{avatarInitials}</AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col">
                       <p className="truncate font-medium text-neutral-300">{session?.user?.name ?? "User"}</p>

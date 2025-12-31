@@ -16,24 +16,39 @@ export async function GET(request: Request, { params }: { params: Promise<{ grou
   const user = (session as any).userId as string;
 
   try {
-    const membership = await prisma.groupMember.findFirst({
-      where: {
-        groupId: groupId,
-        userId: user,
-      },
-    });
+    // Combine membership check and member fetch into parallel queries
+    const [membership, members] = await Promise.all([
+      prisma.groupMember.findFirst({
+        where: {
+          groupId: groupId,
+          userId: user,
+        },
+        select: { id: true }, // Only select what we need for auth check
+      }),
+      prisma.groupMember.findMany({
+        where: {
+          groupId: groupId,
+        },
+        include: {
+          user: {
+            select: { id: true, name: true, image: true, email: true }, // Only select needed fields
+          },
+        },
+      }),
+    ]);
 
     if (!membership) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const members = await prisma.groupMember.findMany({
-      where: {
-        groupId: groupId,
-      },
-    });
-
-    return NextResponse.json({ members });
+    return NextResponse.json(
+      { members },
+      {
+        headers: {
+          'Cache-Control': 'private, max-age=30, stale-while-revalidate=60',
+        },
+      }
+    );
   } catch (e) {
     return NextResponse.json({ error: "Failed to fetch members" }, { status: 500 });
   }

@@ -16,28 +16,50 @@ export async function GET(request: Request, { params }: { params: Promise<{ grou
   const userId = (session as any).userId as string;
 
   try {
-    const membership = await prisma.groupMember.findFirst({
-      where: {
-        groupId: groupId,
-        userId: userId,
-      },
-    });
+    // Run membership check and messages fetch in parallel
+    const [membership, messages] = await Promise.all([
+      prisma.groupMember.findFirst({
+        where: {
+          groupId: groupId,
+          userId: userId,
+        },
+        select: { id: true }, // Only select what we need for auth check
+      }),
+      prisma.chatMessage.findMany({
+        where: {
+          groupId: groupId,
+          postId: null,
+        },
+        orderBy: {
+          createdAt: "asc",
+        },
+        select: {
+          id: true,
+          groupId: true,
+          authorId: true,
+          text: true,
+          postId: true,
+          replyToId: true,
+          spotifyUri: true,
+          youtubeId: true,
+          createdAt: true,
+          editedAt: true,
+        },
+      }),
+    ]);
 
     if (!membership) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const messages = await prisma.chatMessage.findMany({
-      where: {
-        groupId: groupId,
-        postId: null,
-      },
-      orderBy: {
-        createdAt: "asc",
-      },
-    });
-
-    return NextResponse.json({ messages });
+    return NextResponse.json(
+      { messages },
+      {
+        headers: {
+          'Cache-Control': 'private, max-age=5, stale-while-revalidate=15',
+        },
+      }
+    );
   } catch (e) {
     return NextResponse.json({ error: "Failed to fetch messages" }, { status: 500 });
   }

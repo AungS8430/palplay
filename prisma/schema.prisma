@@ -123,6 +123,7 @@ model Group {
   inviteLinks  InviteLink[]
   joinRequests JoinRequest[]
 
+  @@index([isPublic, createdAt], name: "idx_group_public_created")
   @@map("groups")
 }
 
@@ -136,6 +137,8 @@ model GroupMember {
   joinedAt DateTime @default(now())
 
   @@unique([groupId, userId], name: "unique_group_member")
+  @@index([userId], name: "idx_group_member_user")
+  @@index([groupId], name: "idx_group_member_group")
   @@map("group_members")
 }
 
@@ -166,6 +169,8 @@ model JoinRequest {
   updatedAt DateTime @updatedAt
 
   @@unique([groupId, userId], name: "unique_join_request")
+  @@index([userId, status], name: "idx_join_request_user_status")
+  @@index([groupId, status], name: "idx_join_request_group_status")
   @@map("join_requests")
 }
 

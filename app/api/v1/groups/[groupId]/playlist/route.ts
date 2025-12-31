@@ -17,27 +17,52 @@ export async function GET(request: Request, { params }: { params: Promise<{ grou
   const userId = (session as any).userId as string;
 
   try {
-    const membership = await prisma.groupMember.findFirst({
-      where: {
-        groupId: groupId,
-        userId: userId,
-      },
-    });
+    // Run membership check and playlist fetch in parallel
+    const [membership, items] = await Promise.all([
+      prisma.groupMember.findFirst({
+        where: {
+          groupId: groupId,
+          userId: userId,
+        },
+        select: { id: true }, // Only select what we need for auth check
+      }),
+      prisma.groupPlaylistItem.findMany({
+        where: {
+          groupId: groupId,
+        },
+        orderBy: {
+          position: "asc",
+        },
+        select: {
+          id: true,
+          groupId: true,
+          addedById: true,
+          spotifyUri: true,
+          youtubeId: true,
+          title: true,
+          artist: true,
+          album: true,
+          durationSec: true,
+          coverUrl: true,
+          note: true,
+          position: true,
+          createdAt: true,
+        },
+      }),
+    ]);
 
     if (!membership) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const items = await prisma.groupPlaylistItem.findMany({
-      where: {
-        groupId: groupId,
-      },
-      orderBy: {
-        position: "asc",
-      },
-    });
-
-    return NextResponse.json({ items });
+    return NextResponse.json(
+      { items },
+      {
+        headers: {
+          'Cache-Control': 'private, max-age=10, stale-while-revalidate=30',
+        },
+      }
+    );
   } catch (e) {
     return NextResponse.json({ error: "Failed to fetch playlists" }, { status: 500 });
   }
