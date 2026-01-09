@@ -77,12 +77,12 @@ export default function MessageField({ groupId }: { groupId: string }) {
     setSelectOpen(false);
   }
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     console.log("Submitting message:", { message, currentSong });
     e.preventDefault();
     if (!message || message.trim().length === 0) return;
 
-    fetch(`/api/v1/groups/${groupId}/messages`, {
+    const response = await fetch(`/api/v1/groups/${groupId}/messages`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -92,11 +92,16 @@ export default function MessageField({ groupId }: { groupId: string }) {
         spotifyUri: currentSong ? currentSong.spotifyUri : null,
         replyToId: replyingTo ? replyingTo.messageId : null,
       }),
-    })
+    });
+
+    if (response.ok) {
+      const ndata = await response.json()
+      console.log("Message sent successfully:", ndata || "No data returned", "Response status:", response.status);
+    }
 
     setMessage("");
     setReplyingTo && setReplyingTo(null);
-    setCurrentSong(null)
+    setCurrentSong(null);
   }
   return (
     <div className="flex flex-col">

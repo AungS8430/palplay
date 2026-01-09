@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Loader2, Save, Trash2, Globe, Lock, AlertTriangle } from "lucide-react";
+import { Loader2, Save, Trash2, Globe, Lock, AlertTriangle, Link2, Copy, Check } from "lucide-react";
 
 interface SettingsClientProps {
   groupId: string;
@@ -37,6 +37,11 @@ export default function SettingsClient({ groupId, isOwner }: SettingsClientProps
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Invite link state
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [isGeneratingInvite, setIsGeneratingInvite] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
 
   // Initialize form with group data when it loads
   if (groupInfo && !isInitialized) {
@@ -106,6 +111,40 @@ export default function SettingsClient({ groupId, isOwner }: SettingsClientProps
     } finally {
       setIsDeleting(false);
       setShowDeleteDialog(false);
+    }
+  };
+
+  const handleGenerateInvite = async () => {
+    setIsGeneratingInvite(true);
+    setInviteLink(null);
+    setInviteCopied(false);
+
+    try {
+      const response = await fetch(`/api/v1/groups/${groupId}/invite?expiry=7d`, {
+        method: "POST",
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const link = `${window.location.origin}/groups/join?inviteCode=${data.invite.code}`;
+        setInviteLink(link);
+      } else {
+        const data = await response.json();
+        alert(data.error || "Failed to generate invite link");
+      }
+    } catch (error) {
+      console.error("Error generating invite:", error);
+      alert("Failed to generate invite link");
+    } finally {
+      setIsGeneratingInvite(false);
+    }
+  };
+
+  const handleCopyInvite = () => {
+    if (inviteLink) {
+      navigator.clipboard.writeText(inviteLink);
+      setInviteCopied(true);
+      setTimeout(() => setInviteCopied(false), 2000);
     }
   };
 
@@ -188,6 +227,54 @@ export default function SettingsClient({ groupId, isOwner }: SettingsClientProps
               onCheckedChange={setIsPublic}
             />
           </div>
+        </div>
+
+        {/* Invite Links Section */}
+        <div className="bg-neutral-900/50 rounded-lg border border-neutral-800/50 p-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <Link2 className="h-5 w-5 text-blue-400" />
+            <h3 className="font-medium text-neutral-100">Invite Link</h3>
+          </div>
+
+          <p className="text-sm text-neutral-400">
+            Generate an invite link to share with others. Links expire after 7 days.
+          </p>
+
+          {inviteLink ? (
+            <div className="flex items-center gap-2">
+              <Input
+                value={inviteLink}
+                readOnly
+                className="bg-neutral-800/50 border-neutral-700 text-neutral-300 font-mono text-sm"
+              />
+              <Button
+                variant="secondary"
+                size="icon"
+                onClick={handleCopyInvite}
+                className="shrink-0"
+              >
+                {inviteCopied ? (
+                  <Check className="h-4 w-4 text-green-400" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="secondary"
+              onClick={handleGenerateInvite}
+              disabled={isGeneratingInvite}
+              className="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border-blue-600/30"
+            >
+              {isGeneratingInvite ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Link2 className="h-4 w-4 mr-2" />
+              )}
+              Generate Invite Link
+            </Button>
+          )}
         </div>
 
         {/* Save Button */}
