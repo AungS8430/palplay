@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ChatContext } from "@/components/app/chat/chatContext";
+import { toast } from "sonner"
 
 // Cache for reply previews to avoid re-fetching
 const replyPreviewCache = new Map<string, string>();
@@ -80,11 +81,11 @@ export default function ChatItem({
 
       if (!response.ok) {
         const data = await response.json();
-        alert(data.error || "Failed to delete message");
+        toast.error(data.error || "Failed to delete message");
       }
     } catch (error) {
       console.error("Error deleting message:", error);
-      alert("Failed to delete message");
+      toast.error("An error occurred while deleting the message.");
     } finally {
       setIsDeleting(false);
     }

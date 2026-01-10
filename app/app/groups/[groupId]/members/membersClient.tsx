@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { MoreVertical, Shield, ShieldCheck, Crown, UserMinus, ArrowRightLeft, Loader2, Check, X, UserPlus, Globe, Lock, LogOut } from "lucide-react";
+import { toast } from "sonner";
 
 type MemberWithUser = {
   id: string;
@@ -217,13 +218,13 @@ export default function MembersClient({ groupId, currentUserId }: MembersClientP
 
       if (!response.ok) {
         const data = await response.json();
-        alert(data.error || "Failed to leave group");
+        toast.error(data.error || "Failed to leave group");
       } else {
         router.push("/app");
       }
     } catch (error) {
       console.error("Error leaving group:", error);
-      alert("Failed to leave group");
+      toast.error("Failed to leave group");
     } finally {
       setIsLeaving(false);
       setShowLeaveDialog(false);

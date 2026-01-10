@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Loader2, Save, Trash2, Globe, Lock, AlertTriangle, Link2, Copy, Check } from "lucide-react";
+import { toast } from "sonner";
 
 interface SettingsClientProps {
   groupId: string;
@@ -134,7 +135,7 @@ export default function SettingsClient({ groupId, isOwner }: SettingsClientProps
       }
     } catch (error) {
       console.error("Error generating invite:", error);
-      alert("Failed to generate invite link");
+      toast.error("Failed to generate invite link");
     } finally {
       setIsGeneratingInvite(false);
     }

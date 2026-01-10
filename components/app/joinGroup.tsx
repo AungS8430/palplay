@@ -1,6 +1,4 @@
-"use client";
-
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { SidebarMenuButton } from "@/components/ui/sidebar";
 import { Users, Globe, Loader2, Search, UserPlus } from "lucide-react"
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 export default function JoinGroup() {
   const [openFormDialog, setOpenFormDialog] = useState(false);
@@ -98,14 +97,8 @@ export default function JoinGroup() {
     }
   }, [openFormDialog, openConfirmationDialog, openSuccessDialog]);
 
-  // Fetch public groups when dialog opens
-  useEffect(() => {
-    if (openFormDialog) {
-      fetchPublicGroups();
-    }
-  }, [openFormDialog]);
-
-  const fetchPublicGroups = async (search?: string) => {
+  // Stable fetch function to satisfy hooks rules and avoid stale closures
+  const fetchPublicGroups = useCallback(async (search?: string) => {
     setIsLoadingPublicGroups(true);
     try {
       const url = search
@@ -121,7 +114,14 @@ export default function JoinGroup() {
     } finally {
       setIsLoadingPublicGroups(false);
     }
-  };
+  }, []);
+
+  // Fetch public groups when dialog opens
+  useEffect(() => {
+    if (openFormDialog) {
+      fetchPublicGroups();
+    }
+  }, [openFormDialog, fetchPublicGroups]);
 
   const handleRequestJoin = async (groupIdToJoin: string) => {
     setIsRequestingJoin(groupIdToJoin);
@@ -139,11 +139,11 @@ export default function JoinGroup() {
         ));
       } else {
         const data = await response.json();
-        alert(data.error || "Failed to request to join");
+        toast.error(data.error || "Failed to request to join");
       }
     } catch (error) {
       console.error("Error requesting join:", error);
-      alert("Failed to request to join");
+      toast.error("Failed to request to join");
     } finally {
       setIsRequestingJoin(null);
     }
@@ -157,7 +157,7 @@ export default function JoinGroup() {
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [publicGroupsSearch, openFormDialog]);
+  }, [publicGroupsSearch, openFormDialog, fetchPublicGroups]);
 
   return (
     <>
@@ -299,6 +299,5 @@ export default function JoinGroup() {
         }
       </Dialog>
     </>
-
   )
 }

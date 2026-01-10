@@ -74,7 +74,7 @@ export async function testRealtimeConnection(table: string, filter: string) {
       .on("postgres_changes", { event: "*", schema: "public", table, filter }, (_payload: any) => {})
       .subscribe((_status: string, _err: any) => {
         if (_status === "SUBSCRIBED") {
-          setTimeout(() => channel.unsubscribe(), 30000);
+          setTimeout(() => channel.unsubscribe(), 5000);
         }
       });
 
@@ -245,7 +245,7 @@ function useRealtime<T>({
           try {
             setData(prev => {
               const prevArr = (prev || []) as any[];
-              let next: any = prevArr;
+              let next: any;
               if (payload.eventType === "INSERT" && payload.new) {
                 if (payload.new.postId) {
                   return prevArr;
@@ -283,11 +283,13 @@ function useRealtime<T>({
             setError(null);
             isSubscribingRef.current = false;
             retryCountRef.current = 0;
-            try {
-              (window as any).__APP_SUPABASE_CLIENT__ = supabaseClientRef.current;
-              (window as any).__APP_CHANNEL__ = channelRef.current;
-              (window as any).__APP_EXPOSED_AT__ = new Date().toISOString();
-            } catch (e) {}
+            if (process.env.NODE_ENV === "development") {
+              try {
+                (window as any).__APP_SUPABASE_CLIENT__ = supabaseClientRef.current;
+                (window as any).__APP_CHANNEL__ = channelRef.current;
+                (window as any).__APP_EXPOSED_AT__ = new Date().toISOString();
+              } catch (e) {}
+            }
           } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
             setConnected(false);
             isSubscribingRef.current = false;
