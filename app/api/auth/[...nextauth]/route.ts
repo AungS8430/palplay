@@ -50,14 +50,17 @@ const customAdapter = {
         console.log("Token storage SUCCESS! ID:", tokenResult.id);
 
         // Clear plaintext tokens
-        await prisma.account.update({
-          where: { id: result.id },
-          data: {
-            refresh_token: null,
-            access_token: null,
-          },
-        });
-        console.log("Cleared plaintext tokens from account");
+        if (result && result.id && typeof result.id == "string") {
+          await prisma.account.update({
+            where: { id: result.id },
+            data: {
+              refresh_token: null,
+              access_token: null,
+            },
+          });
+          console.log("Cleared plaintext tokens from account");
+
+        }
       }
     } catch (err) {
       console.error("linkAccount: failed to store encrypted tokens", err);
