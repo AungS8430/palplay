@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useRealtimeGroupMembers, useRealtimeJoinRequests, useRealtimeGroupInfo } from "@/lib/realtime";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { MoreVertical, Shield, ShieldCheck, Crown, UserMinus, ArrowRightLeft, Loader2, Check, X, UserPlus, Globe, Lock } from "lucide-react";
+import { MoreVertical, Shield, ShieldCheck, Crown, UserMinus, ArrowRightLeft, Loader2, Check, X, UserPlus, Globe, Lock, LogOut } from "lucide-react";
+import { toast } from "sonner";
 
 type MemberWithUser = {
   id: string;
@@ -56,10 +58,13 @@ interface MembersClientProps {
 }
 
 export default function MembersClient({ groupId, currentUserId }: MembersClientProps) {
+  const router = useRouter();
   const { members, connected: membersConnected } = useRealtimeGroupMembers(groupId);
   const { requests, connected: requestsConnected } = useRealtimeJoinRequests(groupId);
   const { groupInfo, connected: groupConnected } = useRealtimeGroupInfo(groupId);
   const [isLoading, setIsLoading] = useState<string | null>(null);
+  const [isLeaving, setIsLeaving] = useState(false);
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
     type: "remove" | "transfer" | "role";
@@ -201,6 +206,28 @@ export default function MembersClient({ groupId, currentUserId }: MembersClientP
       alert("Failed to reject request");
     } finally {
       setIsLoading(null);
+    }
+  };
+
+  const handleLeaveGroup = async () => {
+    setIsLeaving(true);
+    try {
+      const response = await fetch(`/api/v1/groups/${groupId}/members`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        toast.error(data.error || "Failed to leave group");
+      } else {
+        router.push("/app");
+      }
+    } catch (error) {
+      console.error("Error leaving group:", error);
+      toast.error("Failed to leave group");
+    } finally {
+      setIsLeaving(false);
+      setShowLeaveDialog(false);
     }
   };
 
@@ -458,6 +485,58 @@ export default function MembersClient({ groupId, currentUserId }: MembersClientP
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Leave Group Dialog */}
+      <Dialog open={showLeaveDialog} onOpenChange={setShowLeaveDialog}>
+        <DialogContent className="bg-neutral-900 border-neutral-800">
+          <DialogHeader>
+            <DialogTitle className="text-neutral-100 flex items-center gap-2">
+              <LogOut className="h-5 w-5 text-red-400" />
+              Leave Group
+            </DialogTitle>
+            <DialogDescription className="text-neutral-400">
+              Are you sure you want to leave <span className="font-medium text-neutral-200">{groupInfo?.name}</span>?
+              {!groupInfo?.isPublic && " You will need a new invite to rejoin."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setShowLeaveDialog(false)}
+              className="text-neutral-400 hover:text-neutral-200"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleLeaveGroup}
+              disabled={isLeaving}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isLeaving ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <LogOut className="h-4 w-4 mr-2" />
+              )}
+              Leave Group
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Leave Group Button - Show for non-owners */}
+      {!isOwner && (
+        <div className="mt-6 pt-6 border-t border-neutral-800/50">
+          <Button
+            variant="ghost"
+            onClick={() => setShowLeaveDialog(true)}
+            className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            Leave Group
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

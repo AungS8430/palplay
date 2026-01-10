@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useContext, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useContext, useMemo, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Reply, EllipsisVertical, Trash } from "lucide-react";
+import { Reply, EllipsisVertical, Trash, Loader2 } from "lucide-react";
 import ClientDateTime from "@/components/clientDateTime";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ChatContext } from "@/components/app/chat/chatContext";
+import { toast } from "sonner"
 
 // Cache for reply previews to avoid re-fetching
 const replyPreviewCache = new Map<string, string>();
@@ -65,7 +66,30 @@ export default function ChatItem({
 
   const [replyPreview, setReplyPreview] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(spotifyUri ? "spotify" : "youtube");
+  const [isDeleting, setIsDeleting] = useState(false);
   const { replyingTo, setReplyingTo } = context || {};
+
+  // Handle message deletion
+  const handleDeleteMessage = useCallback(async () => {
+    if (!messageId || isDeleting) return;
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/v1/groups/${groupId}/messages/${messageId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        toast.error(data.error || "Failed to delete message");
+      }
+    } catch (error) {
+      console.error("Error deleting message:", error);
+      toast.error("An error occurred while deleting the message.");
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [messageId, groupId, isDeleting]);
 
   // Memoize avatar initials calculation
   const avatarInitials = useMemo(() => {
@@ -183,7 +207,16 @@ export default function ChatItem({
             <DropdownMenuLabel>Options</DropdownMenuLabel>
             <DropdownMenuSeparator />
             {
-              (out || memberDataProp.member.role == "owner" || memberDataProp.member.role == "admin") && <DropdownMenuItem><Trash />Delete Message</DropdownMenuItem>
+              (out || memberDataProp.member.role == "owner" || memberDataProp.member.role == "admin") && (
+                <DropdownMenuItem
+                  onClick={handleDeleteMessage}
+                  disabled={isDeleting}
+                  variant="destructive"
+                >
+                  {isDeleting ? <Loader2 className="animate-spin" /> : <Trash />}
+                  Delete Message
+                </DropdownMenuItem>
+              )
             }
           </DropdownMenuContent>
         </DropdownMenu>

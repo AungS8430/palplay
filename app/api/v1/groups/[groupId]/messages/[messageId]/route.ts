@@ -161,8 +161,16 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       },
     });
 
-    if (!message || message.authorId !== userId) {
-      return NextResponse.json({ error: "Message not found or access denied" }, { status: 404 });
+    if (!message) {
+      return NextResponse.json({ error: "Message not found" }, { status: 404 });
+    }
+
+    // Allow deletion if user is the author, or is an admin/owner
+    const isAuthor = message.authorId === userId;
+    const isAdminOrOwner = membership.role === "admin" || membership.role === "owner";
+
+    if (!isAuthor && !isAdminOrOwner) {
+      return NextResponse.json({ error: "You don't have permission to delete this message" }, { status: 403 });
     }
 
     await prisma.chatMessage.delete({

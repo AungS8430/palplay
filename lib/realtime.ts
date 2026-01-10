@@ -1,548 +1,494 @@
 "use client";
 
-import { useState, useEffect, useRef, useId } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
-import { getAuthenticatedSupabaseClient } from "@/lib/supabase";
+import { usePathname } from "next/navigation";
+import {
+  getAuthenticatedSupabaseClient,
+  refreshSupabaseToken
+} from "@/lib/supabase";
 import { GroupMember, Group } from "@/lib/types";
+import { RealtimeChannel } from "@supabase/supabase-js";
 
-// Generate a unique ID for channel names to avoid conflicts between multiple hook instances
 function useChannelId(prefix: string, identifier: string) {
-  const instanceId = useId();
   const channelIdRef = useRef<string | null>(null);
-
   if (!channelIdRef.current) {
-    // Create a stable unique channel name using instance ID
-    const sanitizedInstanceId = instanceId.replace(/:/g, '_');
-    channelIdRef.current = `${prefix}:${identifier}:${sanitizedInstanceId}`;
+    const sanitizedIdentifier = (identifier || "anon").toString().replace(/:/g, "_");
+    channelIdRef.current = `${prefix}:${sanitizedIdentifier}`;
+  }
+  return channelIdRef.current!;
+}
+
+function generateRandomSuffix(len = 8) {
+  return Math.random().toString(36).slice(2, 2 + len);
+}
+
+function findUniqueChannelName(client: any, baseName: string, maxAttempts = 8) {
+  const CHANNELS_SYMBOL = Symbol.for("lib.supabase.channels");
+  const map = client ? (client[CHANNELS_SYMBOL] as Map<string, any> | undefined) : undefined;
+
+  for (let i = 0; i < maxAttempts; i++) {
+    const candidate = `${baseName}:${generateRandomSuffix(8)}`;
+    if (map) {
+      try {
+        if (!map.has(candidate)) return candidate;
+      } catch (e) {
+        return candidate;
+      }
+    } else {
+      return candidate;
+    }
   }
 
-  return channelIdRef.current;
+  return `${baseName}:${Date.now()}:${generateRandomSuffix(6)}`;
+}
+
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<T> {
+  let lastError: Error | null = null;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
+      if (i < maxRetries - 1) {
+        await new Promise(resolve => setTimeout(resolve, baseDelay * Math.pow(2, i)));
+      }
+    }
+  }
+  throw lastError!;
+}
+
+export async function testRealtimeConnection(table: string, filter: string) {
+  try {
+    await refreshSupabaseToken();
+    const supabase = await getAuthenticatedSupabaseClient();
+
+    const channel = supabase
+      .channel(`test_${table}_${Date.now()}`, {
+        config: { broadcast: { self: true } }
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table, filter }, (_payload: any) => {})
+      .subscribe((_status: string, _err: any) => {
+        if (_status === "SUBSCRIBED") {
+          setTimeout(() => channel.unsubscribe(), 5000);
+        }
+      });
+
+    return channel;
+  } catch (error) {
+    throw error;
+  }
+}
+
+function useRealtime<T>({
+  table,
+  filter,
+  selectQuery,
+  updateCallback,
+  refetchOnChange = false,
+  single = false,
+  channelPrefix,
+  identifier,
+  initialLoading = false,
+  extraDep
+}: {
+  table: string;
+  filter: string;
+  selectQuery: (supabase: any) => any;
+  updateCallback?: (prev: T | T[] | null, payload: any) => T | T[] | null;
+  refetchOnChange?: boolean;
+  single?: boolean;
+  channelPrefix: string;
+  identifier: string;
+  initialLoading?: boolean;
+  extraDep?: any;
+}): { data: T | T[] | null; connected: boolean; error: Error | null; isLoading?: boolean } {
+  const [data, setData] = useState<T | T[] | null>(single ? null : []);
+  const [connected, setConnected] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const [isLoading, setIsLoading] = useState(initialLoading);
+  const channelName = useChannelId(channelPrefix, identifier);
+
+  const retryCountRef = useRef(0);
+  const maxRetries = 5;
+  const refetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const supabaseClientRef = useRef<any>(null);
+  const isSubscribingRef = useRef(false);
+  const mountedRef = useRef(true);
+  const cleanupTimerRef = useRef<number | null>(null);
+  const handlerRef = useRef<(payload: any) => void | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    if (!identifier) {
+      setData(single ? null : []);
+      setIsLoading(false);
+      return;
+    }
+
+    let reconnectTimeout: NodeJS.Timeout | null = null;
+    let isCleaningUp = false;
+
+    const debouncedRefetch = () => {
+      if (refetchTimeoutRef.current) clearTimeout(refetchTimeoutRef.current);
+      refetchTimeoutRef.current = setTimeout(async () => {
+        if (!supabaseClientRef.current) return;
+        try {
+          const { data: refreshedData, error: refetchError } = await selectQuery(supabaseClientRef.current);
+          if (refetchError) {
+            setError(new Error(refetchError.message || String(refetchError)));
+          } else {
+            setData(single ? refreshedData : (refreshedData || []));
+            setError(null);
+          }
+        } catch (err) {
+          setError(err as Error);
+        }
+      }, 300);
+    };
+
+    const cleanupListener = async () => {
+      if (channelRef.current && handlerRef.current) {
+        try {
+          (channelRef.current as any).off?.(
+            "postgres_changes",
+            { event: "*", schema: "public", table, filter },
+            handlerRef.current
+          );
+        } catch (err) {}
+        handlerRef.current = null;
+      }
+      isSubscribingRef.current = false;
+
+      try {
+        if (channelRef.current) {
+          try {
+            await channelRef.current.unsubscribe();
+          } catch (e) {}
+          channelRef.current = null;
+        }
+      } catch (e) {}
+    };
+
+    const scheduleCleanup = () => {
+      if (cleanupTimerRef.current) {
+        window.clearTimeout(cleanupTimerRef.current);
+        cleanupTimerRef.current = null;
+      }
+      const delayMs = 500;
+      cleanupTimerRef.current = window.setTimeout(() => {
+        cleanupListener().catch(() => {});
+        cleanupTimerRef.current = null;
+      }, delayMs) as unknown as number;
+    };
+
+    const cancelScheduledCleanup = () => {
+      if (cleanupTimerRef.current) {
+        window.clearTimeout(cleanupTimerRef.current);
+        cleanupTimerRef.current = null;
+      }
+    };
+
+    const setupRealtime = async () => {
+      if (isSubscribingRef.current || isCleaningUp) return;
+      isSubscribingRef.current = true;
+
+      cancelScheduledCleanup();
+
+      try {
+        setIsLoading(true);
+        const token = await refreshSupabaseToken();
+
+        supabaseClientRef.current = await getAuthenticatedSupabaseClient();
+
+        try {
+          if (token && supabaseClientRef.current?.realtime?.setAuth) {
+            supabaseClientRef.current.realtime.setAuth(token);
+          }
+        } catch (setErr) {}
+
+        await cleanupListener();
+
+        if (isCleaningUp) return;
+
+        const uniqueName = findUniqueChannelName(supabaseClientRef.current, channelName);
+        channelRef.current = supabaseClientRef.current.channel(uniqueName, { config: { broadcast: { self: true } } });
+
+        if (mountedRef.current) {
+          try {
+            (window as any).__APP_SUPABASE_CLIENT__ = supabaseClientRef.current;
+            (window as any).__APP_CHANNEL__ = channelRef.current;
+          } catch (e) {}
+        }
+
+        handlerRef.current = (payload: any) => {
+          if (!mountedRef.current || isCleaningUp) return;
+
+          if (refetchOnChange) {
+            debouncedRefetch();
+            return;
+          }
+
+          if (updateCallback) {
+            try {
+              setData(prev => updateCallback(prev, payload));
+              return;
+            } catch (err) {}
+          }
+
+          try {
+            setData(prev => {
+              const prevArr = (prev || []) as any[];
+              let next: any;
+              if (payload.eventType === "INSERT" && payload.new) {
+                if (payload.new.postId) {
+                  return prevArr;
+                }
+                if (prevArr.some((m: any) => m.id === payload.new.id)) {
+                  return prevArr;
+                }
+                next = [payload.new, ...prevArr];
+              } else if (payload.eventType === "UPDATE" && payload.new) {
+                next = prevArr.map((m: any) => (m.id === payload.new.id ? payload.new : m));
+              } else if (payload.eventType === "DELETE" && payload.old) {
+                next = prevArr.filter((m: any) => m.id !== payload.old.id);
+              } else {
+                return prevArr;
+              }
+              return next;
+            });
+          } catch (err) {}
+        };
+
+        const ch = channelRef.current;
+        if (!ch) {
+          setIsLoading(false);
+          isSubscribingRef.current = false;
+          return;
+        }
+
+        ch.on("postgres_changes", { event: "*", schema: "public", table, filter }, handlerRef.current);
+
+        await ch.subscribe((status: string, _err: any) => {
+          const channelState = (channelRef.current as any)?.state || {};
+
+          if (status === "SUBSCRIBED") {
+            setConnected(true);
+            setError(null);
+            isSubscribingRef.current = false;
+            retryCountRef.current = 0;
+            if (process.env.NODE_ENV === "development") {
+              try {
+                (window as any).__APP_SUPABASE_CLIENT__ = supabaseClientRef.current;
+                (window as any).__APP_CHANNEL__ = channelRef.current;
+                (window as any).__APP_EXPOSED_AT__ = new Date().toISOString();
+              } catch (e) {}
+            }
+          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            setConnected(false);
+            isSubscribingRef.current = false;
+            setError(channelState?.last_error || channelState?.error ? new Error(JSON.stringify(channelState?.last_error || channelState?.error)) : new Error("Subscription failed"));
+            if (retryCountRef.current < maxRetries && !isCleaningUp && mountedRef.current) {
+              const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 30000);
+              retryCountRef.current++;
+              reconnectTimeout = setTimeout(() => {
+                if (!isCleaningUp && mountedRef.current) {
+                  cleanupListener().then(setupRealtime).catch(() => {});
+                }
+              }, delay);
+            }
+          } else if (status === "CLOSED") {
+            setConnected(false);
+            isSubscribingRef.current = false;
+          }
+        });
+
+        const { data: fetchedData, error: fetchError } = await retryWithBackoff(async () => selectQuery(supabaseClientRef.current));
+        if (fetchError) {
+          setError(new Error(fetchError.message || String(fetchError)));
+          setIsLoading(false);
+          isSubscribingRef.current = false;
+          return;
+        }
+        setData(single ? fetchedData : (fetchedData || []));
+        setError(null);
+        setIsLoading(false);
+
+      } catch (err) {
+        setError(err as Error);
+        setIsLoading(false);
+        isSubscribingRef.current = false;
+      }
+    };
+
+    setupRealtime();
+
+    return () => {
+      isCleaningUp = true;
+      mountedRef.current = false;
+
+      scheduleCleanup();
+
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (refetchTimeoutRef.current) {
+        clearTimeout(refetchTimeoutRef.current);
+        refetchTimeoutRef.current = null;
+      }
+
+      setConnected(false);
+      isSubscribingRef.current = false;
+    };
+  }, [identifier, table, filter, single, refetchOnChange, extraDep]);
+
+  return { data, connected, error, isLoading };
 }
 
 export function useRealtimeGroupList() {
   const session = useSession();
-  const [groups, setGroups] = useState<GroupMember[]>([]);
-  const [connected, setConnected] = useState(false);
   const userId = session.data?.user?.id;
-  const channelName = useChannelId("group_members_user", userId || "none");
+  const pathname = usePathname();
 
-  useEffect(() => {
-    if (!userId) {
-      setGroups([]);
-      return;
-    }
-
-    let channel: any = null;
-    let isMounted = true;
-
-    const setupRealtime = async () => {
-      try {
-        const supabaseClient = await getAuthenticatedSupabaseClient();
-
-        const { data, error } = await supabaseClient
-          .from("group_members")
-          .select("id, groupId, userId, role, joinedAt")
-          .eq("userId", userId);
-
-        if (!isMounted) return;
-
-        if (error) {
-          console.error("Error fetching groups:", error.message || error);
-        } else {
-          setGroups(data || []);
-        }
-
-        channel = supabaseClient
-          .channel(channelName, {
-            config: {
-              broadcast: { self: true },
-              presence: { key: userId }
-            }
-          })
-          .on(
-            "postgres_changes",
-            {
-              event: "*",
-              schema: "public",
-              table: "group_members",
-              filter: `userId=eq.${userId}`
-            },
-            async (payload: any) => {
-              if (!isMounted) return;
-
-              if (payload.eventType === "INSERT" && payload.new) {
-                setGroups(prev => {
-                  if (prev.some(g => g.id === payload.new.id)) return prev;
-                  return [...prev, payload.new as GroupMember];
-                });
-              } else if (payload.eventType === "DELETE" && payload.old) {
-                setGroups(prev => prev.filter(g => g.id !== payload.old.id));
-              } else if (payload.eventType === "UPDATE" && payload.new) {
-                setGroups(prev => prev.map(g => g.id === payload.new.id ? payload.new : g));
-              }
-            }
-          )
-          .subscribe((status: string, err: any) => {
-            if (!isMounted) return;
-            if (err) {
-              console.error("Realtime subscription error:", err);
-            }
-            setConnected(status === "SUBSCRIBED");
-          });
-      } catch (error) {
-        console.error("Failed to setup realtime:", error);
-        if (isMounted) setConnected(false);
+  const result = useRealtime<GroupMember>({
+    table: "group_members",
+    filter: `userId=eq.${userId || ""}`,
+    selectQuery: (supabase) => supabase.from("group_members").select("id, groupId, userId, role, joinedAt").eq("userId", userId || ""),
+    updateCallback: (prev, payload) => {
+      const prevArray = (prev || []) as GroupMember[];
+      if (payload.eventType === "INSERT" && payload.new) {
+        if (prevArray.some(member => member.id === payload.new.id)) return prevArray;
+        return [...prevArray, payload.new];
+      } else if (payload.eventType === "UPDATE" && payload.new) {
+        return prevArray.map(member => (member.id === payload.new.id ? payload.new : member));
+      } else if (payload.eventType === "DELETE" && payload.old) {
+        return prevArray.filter(member => member.id !== payload.old.id);
       }
-    };
+      return prevArray;
+    },
+    channelPrefix: "group_members_user",
+    identifier: userId || "",
+    extraDep: pathname
+  });
 
-    setupRealtime();
-
-    return () => {
-      isMounted = false;
-      if (channel) {
-        channel.unsubscribe();
-      }
-      setConnected(false);
-    };
-  }, [userId, channelName]);
-
-  return { groups, connected };
+  return { groups: result.data as GroupMember[], connected: result.connected, error: result.error };
 }
 
 export function useRealtimeGroupInfo(groupId: string) {
-  const [groupInfo, setGroupInfo] = useState<Group | null>(null);
-  const [connected, setConnected] = useState(false);
-  const channelName = useChannelId("groups", groupId || "none");
+  const result = useRealtime<Group>({
+    table: "groups",
+    filter: `id=eq.${groupId || ""}`,
+    selectQuery: (supabase) => supabase.from("groups").select("id, name, description, isPublic, createdAt").eq("id", groupId || "").single(),
+    updateCallback: (prev, payload) => payload.new || prev,
+    single: true,
+    channelPrefix: "groups",
+    identifier: groupId || ""
+  });
 
-  useEffect(() => {
-    if (!groupId) return;
-
-    let channel: any = null;
-    let isMounted = true;
-
-    const setupRealtime = async () => {
-      try {
-        const supabaseClient = await getAuthenticatedSupabaseClient();
-
-        const { data, error } = await supabaseClient
-          .from("groups")
-          .select("id, name, description, isPublic, createdAt")
-          .eq("id", groupId)
-          .single();
-
-        if (!isMounted) return;
-
-        if (error) {
-          console.error("Error fetching group:", error.message || error);
-        } else {
-          setGroupInfo(data);
-        }
-
-
-        channel = supabaseClient
-          .channel(channelName, {
-            config: {
-              broadcast: { self: true },
-              presence: { key: groupId }
-            }
-          })
-          .on(
-            "postgres_changes",
-            {
-              event: "*",
-              schema: "public",
-              table: "groups",
-              filter: `id=eq.${groupId}`
-            },
-            async (payload: any) => {
-              if (!isMounted) return;
-
-              if (payload.new) {
-                setGroupInfo(payload.new as Group);
-              }
-            }
-          )
-          .subscribe((status: string, err: any) => {
-            if (!isMounted) return;
-            if (err) {
-              console.error("Group info realtime subscription error:", err);
-            }
-            setConnected(status === "SUBSCRIBED");
-          });
-      } catch (error) {
-        console.error("Failed to setup group info realtime:", error);
-        if (isMounted) setConnected(false);
-      }
-    };
-
-    setupRealtime();
-
-    return () => {
-      isMounted = false;
-      if (channel) {
-        channel.unsubscribe();
-      }
-      setConnected(false);
-    };
-  }, [groupId, channelName]);
-
-  return { groupInfo, connected };
+  return { groupInfo: result.data as Group | null, connected: result.connected, error: result.error };
 }
 
 export function useRealtimeChatMessages(groupId: string) {
-  const [messages, setMessages] = useState<any[]>([]);
-  const [connected, setConnected] = useState(false);
-  const channelName = useChannelId("chat_messages", groupId || "none");
-
-  useEffect(() => {
-    if (!groupId) return;
-
-    let channel: any = null;
-    let isMounted = true;
-
-    const setupRealtime = async () => {
-      try {
-        const supabaseClient = await getAuthenticatedSupabaseClient();
-
-        const { data, error } = await supabaseClient
-          .from("chat_messages")
-          .select("id, groupId, authorId, text, postId, replyToId, spotifyUri, youtubeId, createdAt, editedAt")
-          .eq("groupId", groupId)
-          .order("createdAt", { ascending: false })
-          .limit(100); // Limit initial load for better performance
-
-        if (!isMounted) return;
-
-        if (error) {
-          console.error("Error fetching chat messages:", error);
-        } else {
-          setMessages(data || []);
-        }
-
-
-        channel = supabaseClient
-          .channel(channelName)
-          .on(
-            "postgres_changes",
-            {
-              event: "*",
-              schema: "public",
-              table: "chat_messages",
-              filter: `groupId=eq.${groupId}`
-            },
-            (payload: any) => {
-              if (!isMounted) return;
-
-              if (payload.eventType === "INSERT" && payload.new) {
-                setMessages(prev => {
-                  // Prevent duplicates
-                  if (prev.some(msg => msg.id === payload.new.id)) {
-                    return prev;
-                  }
-                  return [payload.new as any, ...prev];
-                });
-              } else if (payload.eventType === "UPDATE" && payload.new) {
-                setMessages(prev => prev.map(msg => msg.id === payload.new.id ? payload.new : msg));
-              } else if (payload.eventType === "DELETE" && payload.old) {
-                setMessages(prev => prev.filter(msg => msg.id !== payload.old.id));
-              }
-            }
-          )
-          .subscribe((status: string, err: any) => {
-            if (!isMounted) return;
-            if (err) {
-              console.error("Chat messages realtime subscription error:", err);
-            }
-            setConnected(status === "SUBSCRIBED");
-          });
-      } catch (error) {
-        console.error("Failed to setup chat messages realtime:", error);
-        if (isMounted) setConnected(false);
+  const result = useRealtime<any>({
+    table: "chat_messages",
+    filter: `groupId=eq.${groupId || ""}`,
+    selectQuery: (supabase) =>
+      supabase
+        .from("chat_messages")
+        .select("id, groupId, authorId, text, postId, replyToId, spotifyUri, youtubeId, createdAt, editedAt")
+        .eq("groupId", groupId || "")
+        .is("postId", null)
+        .order("createdAt", { ascending: false })
+        .limit(100),
+    updateCallback: (prev, payload) => {
+      const prevArray = (prev || []) as any[];
+      if (payload.eventType === "INSERT" && payload.new) {
+        if (payload.new.postId) return prevArray;
+        if (prevArray.some(msg => msg.id === payload.new.id)) return prevArray;
+        return [payload.new, ...prevArray];
+      } else if (payload.eventType === "UPDATE" && payload.new) {
+        return prevArray.map(msg => (msg.id === payload.new.id ? payload.new : msg));
+      } else if (payload.eventType === "DELETE" && payload.old) {
+        return prevArray.filter(msg => msg.id !== payload.old.id);
       }
-    };
+      return prevArray;
+    },
+    channelPrefix: "chat_messages",
+    identifier: groupId || "",
+    initialLoading: true
+  });
 
-    setupRealtime();
-
-    return () => {
-      isMounted = false;
-      if (channel) {
-        channel.unsubscribe();
-      }
-      setConnected(false);
-    };
-  }, [groupId, channelName]);
-
-  return { messages, connected };
+  return { messages: result.data as any[], connected: result.connected, error: result.error, isLoading: result.isLoading };
 }
 
 export function useRealtimeGroupMembers(groupId: string) {
-  const [members, setMembers] = useState<any[]>([]);
-  const [connected, setConnected] = useState(false);
-  const channelName = useChannelId("group_members_group", groupId || "none");
+  const result = useRealtime<any>({
+    table: "group_members",
+    filter: `groupId=eq.${groupId || ""}`,
+    selectQuery: (supabase) =>
+      supabase
+        .from("group_members")
+        .select("id, groupId, userId, role, joinedAt, user:users(id, name, email, image)")
+        .eq("groupId", groupId || ""),
+    refetchOnChange: true,
+    channelPrefix: "group_members_group",
+    identifier: groupId || ""
+  });
 
-  useEffect(() => {
-    if (!groupId) return;
-
-    let channel: any = null;
-    let isMounted = true;
-
-    const setupRealtime = async () => {
-      try {
-        const supabaseClient = await getAuthenticatedSupabaseClient();
-
-        const { data, error } = await supabaseClient
-          .from("group_members")
-          .select("id, groupId, userId, role, joinedAt, user:users(id, name, email, image)")
-          .eq("groupId", groupId);
-
-        if (!isMounted) return;
-
-        if (error) {
-          console.error("Error fetching group members:", error);
-        } else {
-          setMembers(data || []);
-        }
-
-
-        channel = supabaseClient
-          .channel(channelName)
-          .on(
-            "postgres_changes",
-            {
-              event: "*",
-              schema: "public",
-              table: "group_members",
-              filter: `groupId=eq.${groupId}`
-            },
-            async (payload: any) => {
-              if (!isMounted) return;
-
-              // Refetch all members to get user data
-              const { data: refreshedMembers } = await supabaseClient
-                .from("group_members")
-                .select("id, groupId, userId, role, joinedAt, user:users(id, name, email, image)")
-                .eq("groupId", groupId);
-
-              if (refreshedMembers && isMounted) {
-                setMembers(refreshedMembers);
-              }
-            }
-          )
-          .subscribe((status: string, err: any) => {
-            if (!isMounted) return;
-            if (err) {
-              console.error("Group members realtime subscription error:", err);
-            }
-            setConnected(status === "SUBSCRIBED");
-          });
-      } catch (error) {
-        console.error("Failed to setup group members realtime:", error);
-        if (isMounted) setConnected(false);
-      }
-    };
-
-    setupRealtime();
-
-    return () => {
-      isMounted = false;
-      if (channel) {
-        channel.unsubscribe();
-      }
-      setConnected(false);
-    };
-  }, [groupId, channelName]);
-
-  return { members, connected };
+  return { members: result.data as any[], connected: result.connected, error: result.error };
 }
 
 export function useRealtimeJoinRequests(groupId: string) {
-  const [requests, setRequests] = useState<any[]>([]);
-  const [connected, setConnected] = useState(false);
-  const channelName = useChannelId("join_requests", groupId || "none");
+  const result = useRealtime<any>({
+    table: "join_requests",
+    filter: `groupId=eq.${groupId || ""}`,
+    selectQuery: (supabase) =>
+      supabase
+        .from("join_requests")
+        .select("id, groupId, userId, message, status, createdAt, user:users(id, name, email, image)")
+        .eq("groupId", groupId || "")
+        .eq("status", "pending"),
+    refetchOnChange: true,
+    channelPrefix: "join_requests",
+    identifier: groupId || ""
+  });
 
-  useEffect(() => {
-    if (!groupId) return;
-
-    let channel: any = null;
-    let isMounted = true;
-
-    const setupRealtime = async () => {
-      try {
-        const supabaseClient = await getAuthenticatedSupabaseClient();
-
-        const { data, error } = await supabaseClient
-          .from("join_requests")
-          .select("id, groupId, userId, message, status, createdAt, user:users(id, name, email, image)")
-          .eq("groupId", groupId)
-          .eq("status", "pending");
-
-        if (!isMounted) return;
-
-        if (error) {
-          console.error("Error fetching join requests:", error);
-        } else {
-          setRequests(data || []);
-        }
-
-
-        channel = supabaseClient
-          .channel(channelName)
-          .on(
-            "postgres_changes",
-            {
-              event: "*",
-              schema: "public",
-              table: "join_requests",
-              filter: `groupId=eq.${groupId}`
-            },
-            async () => {
-              if (!isMounted) return;
-
-              // Refetch all pending requests to get user data
-              const { data: refreshedRequests } = await supabaseClient
-                .from("join_requests")
-                .select("id, groupId, userId, message, status, createdAt, user:users(id, name, email, image)")
-                .eq("groupId", groupId)
-                .eq("status", "pending");
-
-              if (refreshedRequests && isMounted) {
-                setRequests(refreshedRequests);
-              }
-            }
-          )
-          .subscribe((status: string, err: any) => {
-            if (!isMounted) return;
-            if (err) {
-              console.error("Join requests realtime subscription error:", err);
-            }
-            setConnected(status === "SUBSCRIBED");
-          });
-      } catch (error) {
-        console.error("Failed to setup join requests realtime:", error);
-        if (isMounted) setConnected(false);
-      }
-    };
-
-    setupRealtime();
-
-    return () => {
-      isMounted = false;
-      if (channel) {
-        channel.unsubscribe();
-      }
-      setConnected(false);
-    };
-  }, [groupId, channelName]);
-
-  return { requests, connected };
+  return { requests: result.data as any[], connected: result.connected, error: result.error };
 }
 
 export function useRealtimeGroupPlaylist(groupId: string) {
-  const [playlistItems, setPlaylistItems] = useState<any[]>([]);
-  const [connected, setConnected] = useState(false);
-  const channelName = useChannelId("group_playlist", groupId || "none");
-
-  useEffect(() => {
-    if (!groupId) return;
-
-    let channel: any = null;
-    let isMounted = true;
-
-    const setupRealtime = async () => {
-      try {
-        const supabaseClient = await getAuthenticatedSupabaseClient();
-
-        const { data, error } = await supabaseClient
-          .from("group_playlist_items")
-          .select("id, groupId, addedById, spotifyUri, youtubeId, title, artist, album, durationSec, coverUrl, note, position, createdAt")
-          .eq("groupId", groupId)
-          .order("position", { ascending: true });
-
-        if (!isMounted) return;
-
-        if (error) {
-          console.error("Error fetching playlist items:", error);
-        } else {
-          setPlaylistItems(data || []);
-        }
-
-
-        channel = supabaseClient
-          .channel(channelName)
-          .on(
-            "postgres_changes",
-            {
-              event: "INSERT",
-              schema: "public",
-              table: "group_playlist_items",
-              filter: `groupId=eq.${groupId}`
-            },
-            (payload: any) => {
-              if (!isMounted) return;
-              if (payload.new) {
-                setPlaylistItems(prev => {
-                  // Prevent duplicates
-                  if (prev.some(item => item.id === payload.new.id)) {
-                    return prev;
-                  }
-                  return [...prev, payload.new as any];
-                });
-              }
-            }
-          )
-          .on(
-            "postgres_changes",
-            {
-              event: "UPDATE",
-              schema: "public",
-              table: "group_playlist_items",
-              filter: `groupId=eq.${groupId}`
-            },
-            (payload: any) => {
-              if (!isMounted) return;
-              if (payload.new) {
-                setPlaylistItems(prev => prev.map(item => item.id === payload.new.id ? payload.new : item));
-              }
-            }
-          )
-          .on(
-            "postgres_changes",
-            {
-              event: "DELETE",
-              schema: "public",
-              table: "group_playlist_items"
-            },
-            (payload: any) => {
-              if (!isMounted) return;
-              // For DELETE, we filter client-side since payload.old may not include groupId
-              if (payload.old && payload.old.id) {
-                setPlaylistItems(prev => prev.filter(item => item.id !== payload.old.id));
-              }
-            }
-          )
-          .subscribe((status: string, err: any) => {
-            if (!isMounted) return;
-            if (err) {
-              console.error("Playlist realtime subscription error:", err);
-            }
-            setConnected(status === "SUBSCRIBED");
-          });
-      } catch (error) {
-        console.error("Failed to setup playlist realtime:", error);
-        if (isMounted) setConnected(false);
+  const result = useRealtime<any>({
+    table: "group_playlist_items",
+    filter: `groupId=eq.${groupId || ""}`,
+    selectQuery: (supabase) =>
+      supabase
+        .from("group_playlist_items")
+        .select("id, groupId, addedById, spotifyUri, youtubeId, title, artist, album, durationSec, coverUrl, note, position, createdAt")
+        .eq("groupId", groupId || "")
+        .order("position", { ascending: true }),
+    updateCallback: (prev, payload) => {
+      const prevArray = (prev || []) as any[];
+      let newPrev;
+      if (payload.eventType === "INSERT" && payload.new) {
+        if (prevArray.some(item => item.id === payload.new.id)) return prevArray;
+        newPrev = [...prevArray, payload.new];
+      } else if (payload.eventType === "UPDATE" && payload.new) {
+        newPrev = prevArray.map(item => (item.id === payload.new.id ? payload.new : item));
+      } else if (payload.eventType === "DELETE" && payload.old) {
+        newPrev = prevArray.filter(item => item.id !== payload.old.id);
+      } else {
+        return prevArray;
       }
-    };
+      return newPrev.sort((a: any, b: any) => Number(a.position ?? 0) - Number(b.position ?? 0));
+    },
+    channelPrefix: "group_playlist",
+    identifier: groupId || "",
+    initialLoading: true
+  });
 
-    setupRealtime();
-
-    return () => {
-      isMounted = false;
-      if (channel) {
-        channel.unsubscribe();
-      }
-      setConnected(false);
-    };
-  }, [groupId, channelName]);
-
-  return { playlistItems, connected };
+  return { playlistItems: result.data as any[], connected: result.connected, error: result.error, isLoading: result.isLoading };
 }

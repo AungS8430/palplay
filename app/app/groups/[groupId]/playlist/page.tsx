@@ -38,7 +38,19 @@ export default function GroupPlaylistItem({ params }: { params: Promise<{ groupI
   const [dialogOpen, setDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Array<any>>([]);
+  const [playlistFilter, setPlaylistFilter] = useState("");
   const { playlistItems, connected } = useRealtimeGroupPlaylist(groupId);
+
+  // Filter playlist items based on search
+  const filteredPlaylistItems = playlistItems.filter((item) => {
+    if (!playlistFilter) return true;
+    const searchLower = playlistFilter.toLowerCase();
+    return (
+      item.title?.toLowerCase().includes(searchLower) ||
+      item.artist?.toLowerCase().includes(searchLower) ||
+      item.album?.toLowerCase().includes(searchLower)
+    );
+  });
 
   // Spotify sync state
   const [linkedPlaylist, setLinkedPlaylist] = useState<{
@@ -208,7 +220,12 @@ export default function GroupPlaylistItem({ params }: { params: Promise<{ groupI
             <span className="text-sm text-red-400 bg-red-500/10 px-3 py-1.5 rounded-full self-center">{syncError}</span>
           )}
           <ButtonGroup className="grow">
-            <Input placeholder="Search the playlist..." className="bg-neutral-900/50 border-neutral-800" />
+            <Input
+              placeholder="Search the playlist..."
+              className="bg-neutral-900/50 border-neutral-800"
+              value={playlistFilter}
+              onChange={(e) => setPlaylistFilter(e.target.value)}
+            />
             <Button size="icon" variant="outline" className="hover:bg-neutral-800"><Search /></Button>
           </ButtonGroup>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -280,7 +297,7 @@ export default function GroupPlaylistItem({ params }: { params: Promise<{ groupI
             </TableRow>
           </TableHeader>
           <TableBody className="divide-y-0!">
-            {playlistItems.map((item, index) => (
+            {filteredPlaylistItems.map((item, index) => (
               <TableRow key={item.id} className="border-neutral-800/30 hover:bg-neutral-800/40 transition-colors group">
                 <TableCell className="text-center text-neutral-500 group-hover:text-neutral-400">{index + 1}</TableCell>
                 <TableCell>
@@ -327,12 +344,21 @@ export default function GroupPlaylistItem({ params }: { params: Promise<{ groupI
                 </TableCell>
               </TableRow>
             ))}
-            {playlistItems.length === 0 && (
+            {filteredPlaylistItems.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-16">
                   <Music className="h-12 w-12 mx-auto mb-3 text-neutral-600" />
-                  <p className="text-neutral-500 font-medium">No tracks in this playlist yet</p>
-                  <p className="text-neutral-600 text-sm mt-1">Click "Add Songs" to get started</p>
+                  {playlistFilter ? (
+                    <>
+                      <p className="text-neutral-500 font-medium">No tracks match your search</p>
+                      <p className="text-neutral-600 text-sm mt-1">Try a different search term</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-neutral-500 font-medium">No tracks in this playlist yet</p>
+                      <p className="text-neutral-600 text-sm mt-1">Click "Add Songs" to get started</p>
+                    </>
+                  )}
                 </TableCell>
               </TableRow>
             )}

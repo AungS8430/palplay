@@ -2,6 +2,8 @@ import { Plus_Jakarta_Sans } from "next/font/google"
 import "./globals.css"
 import type { Metadata, Viewport } from "next"
 
+import { Toaster } from "@/components/ui/sonner"
+
 const jakartaSans = Plus_Jakarta_Sans({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
@@ -40,6 +42,7 @@ export default function RootLayout({
     <html lang="en" className={jakartaSans.variable}>
       <body className={`dark ${jakartaSans.className}`}>
         {children}
+        <Toaster position="top-right" />
       </body>
     </html>
   )
