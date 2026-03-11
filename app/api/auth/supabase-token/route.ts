@@ -3,10 +3,21 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import jwt from "jsonwebtoken";
 
-const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET!;
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET() {
   try {
+    const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET;
+    
+    if (!SUPABASE_JWT_SECRET) {
+      console.error("SUPABASE_JWT_SECRET environment variable not set");
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 }
+      );
+    }
+
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
