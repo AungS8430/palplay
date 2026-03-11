@@ -1,6 +1,5 @@
 import NextAuth, { type NextAuthOptions } from "next-auth";
 import SpotifyProvider from "next-auth/providers/spotify";
-import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
@@ -79,7 +78,7 @@ export const authOptions: NextAuthOptions = {
       authorization: {
         params: {
           scope:
-            "user-read-private user-read-email " +
+            "user-read-private " +
             "playlist-modify-public playlist-modify-private " +
             "user-library-read user-library-modify " +
             "user-top-read user-read-recently-played",

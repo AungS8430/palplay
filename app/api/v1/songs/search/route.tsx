@@ -16,11 +16,23 @@ export async function GET(request: NextRequest) {
 
   const searchParams = request.nextUrl.searchParams;
   const query = searchParams.get("q") || "";
-  const limit = searchParams.get("limit") || "";
-  const offset = searchParams.get("offset") || "";
+  const limitParam = Number(searchParams.get("limit"));
+  const offsetParam = Number(searchParams.get("offset"));
+
+  // Feb 2026 Spotify dev-mode update lowers search max limit to 10.
+  const limit = Number.isFinite(limitParam)
+    ? Math.min(Math.max(Math.floor(limitParam), 1), 10)
+    : 5;
+  const offset = Number.isFinite(offsetParam)
+    ? Math.max(Math.floor(offsetParam), 0)
+    : 0;
 
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!query.trim()) {
+    return NextResponse.json([]);
   }
 
   const user = (session as any).userId as string;
@@ -37,8 +49,8 @@ export async function GET(request: NextRequest) {
   const res = await fetch("https://api.spotify.com/v1/search?" + new URLSearchParams({
     q: query,
     type: "track",
-    limit: limit,
-    offset: offset,
+    limit: String(limit),
+    offset: String(offset),
   }), {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -47,6 +59,23 @@ export async function GET(request: NextRequest) {
 
   if (!res.ok) {
     const errorText = await res.text();
+    if (res.status === 401) {
+      return NextResponse.json(
+        { error: "Spotify authorization expired. Please sign in again." },
+        { status: 401 }
+      );
+    }
+
+    if (res.status === 403) {
+      return NextResponse.json(
+        {
+          error:
+            "Spotify denied access for this app/account in Development Mode. Check app owner Premium status and app user access.",
+        },
+        { status: 403 }
+      );
+    }
+
     console.error("Spotify API error:", {
       status: res.status,
       statusText: res.statusText,

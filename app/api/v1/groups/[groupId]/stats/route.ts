@@ -404,7 +404,7 @@ export async function GET(
 
     // Build leaderboard based on listening time
     const leaderboard = members
-      .map((member) => ({
+      .map((member: { user: any; role: any; joinedAt: any; userId: string | number; }) => ({
         user: member.user,
         role: member.role,
         joinedAt: member.joinedAt,
@@ -412,7 +412,7 @@ export async function GET(
         topTracksCount: memberStats[member.userId]?.topTracksCount || 0,
         hasSpotifyConnected: memberStats[member.userId]?.hasSpotifyConnected || false,
       }))
-      .sort((a, b) => b.totalListeningMs - a.totalListeningMs);
+      .sort((a: { totalListeningMs: number; }, b: { totalListeningMs: number; }) => b.totalListeningMs - a.totalListeningMs);
 
     // Convert total listening time to seconds
     const totalListeningSec = Math.round(totalListeningMs / 1000);

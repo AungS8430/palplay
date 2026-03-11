@@ -9,29 +9,13 @@ import { getProviderAccessToken } from "@/lib/crypto";
  */
 async function createSpotifyPlaylist(
   accessToken: string,
-  userId: string,
   name: string,
   description?: string
 ): Promise<{ id: string; external_urls: { spotify: string } } | null> {
   try {
-    // First get the Spotify user ID
-    const userResponse = await fetch("https://api.spotify.com/v1/me", {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
-
-    if (!userResponse.ok) {
-      console.error("Failed to get Spotify user:", await userResponse.text());
-      return null;
-    }
-
-    const userData = await userResponse.json();
-    const spotifyUserId = userData.id;
-
     // Create the playlist
     const response = await fetch(
-      `https://api.spotify.com/v1/users/${spotifyUserId}/playlists`,
+      "https://api.spotify.com/v1/me/playlists",
       {
         method: "POST",
         headers: {
@@ -75,7 +59,7 @@ async function addTracksToSpotifyPlaylist(
 
     for (const chunk of chunks) {
       const response = await fetch(
-        `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
+        `https://api.spotify.com/v1/playlists/${playlistId}/items`,
         {
           method: "POST",
           headers: {
@@ -112,7 +96,7 @@ async function replaceTracksInSpotifyPlaylist(
   try {
     // First, clear the playlist by replacing with empty array
     const clearResponse = await fetch(
-      `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
+      `https://api.spotify.com/v1/playlists/${playlistId}/items`,
       {
         method: "PUT",
         headers: {
@@ -199,8 +183,8 @@ export async function POST(
     });
 
     const spotifyUris = playlistItems
-      .map((item) => item.spotifyUri)
-      .filter((uri): uri is string => uri !== null);
+      .map((item: { spotifyUri: string | null }) => item.spotifyUri)
+      .filter((uri: string | null): uri is string => uri !== null);
 
     // Check if user already has a linked playlist for this group
     let linkedPlaylist = await prisma.groupPlaylistUserLinkedPlaylists.findFirst({
@@ -235,7 +219,6 @@ export async function POST(
       const playlistName = `${group.name} - PalPlay`;
       const newPlaylist = await createSpotifyPlaylist(
         accessToken,
-        userId,
         playlistName,
         group.description || `Collaborative playlist from PalPlay`
       );
