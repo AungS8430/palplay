@@ -49,14 +49,14 @@ export async function GET(req: Request) {
       }),
     ]);
 
-    const memberGroupIds = new Set(userMemberships.map((m) => m.groupId));
-    const pendingGroupIds = new Set(pendingRequests.map((r) => r.groupId));
+    const memberGroupIds = new Set(userMemberships.map((m: { groupId: any; }) => m.groupId));
+    const pendingGroupIds = new Set(pendingRequests.map((r: { groupId: any; }) => r.groupId));
 
     // Filter out groups user is already a member of and add status
     const groupsWithStatus = publicGroups
-      .filter((group) => !memberGroupIds.has(group.id))
+      .filter((group: { id: unknown; }) => !memberGroupIds.has(group.id))
       .slice(0, 50)
-      .map((group) => ({
+      .map((group: { _count: { members: any; }; id: unknown; }) => ({
         ...group,
         memberCount: group._count.members,
         hasPendingRequest: pendingGroupIds.has(group.id),
