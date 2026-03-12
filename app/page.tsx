@@ -3,7 +3,7 @@ import SignInButton from "@/components/home/signIn";
 import Navbar from "@/components/home/menu";
 import {
   Card,
-  CardDescription,
+  CardDescription, CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
@@ -30,7 +30,7 @@ export default async function Root() {
                   🎵 Demo Account Required
                 </CardTitle>
                 <CardDescription className="text-neutral-300 text-base leading-relaxed max-w-2xl mx-auto">
-                  This demo requires you to sign in with a specific Spotify account. Please use the following credentials:
+                  This demo requires you to sign in with a specific Spotify account. As Spotify doesn't allow developers to request for extended quota if we're individuals. Please use the following credentials:
                 </CardDescription>
                 <div className="bg-neutral-900/70 rounded-lg p-4 max-w-md mx-auto space-y-2">
                   <p className="text-neutral-200">
@@ -41,6 +41,9 @@ export default async function Root() {
                     <span className="text-neutral-400">Password:</span>{" "}
                     <code className="bg-neutral-800 px-2 py-1 rounded text-amber-300">test123456</code>
                   </p>
+                </div>
+                <div className="mx-auto">
+                  Click "Log in with a password" if asked for an OTP.
                 </div>
               </CardHeader>
             </Card>
